@@ -32,7 +32,7 @@ Hai trang dùng **chung một bộ icon** (xem thư mục `ui/` trong `DEV-NOTES
 
 | File | Kích thước | Nền | Dùng ở đâu |
 |---|---|---|---|
-| `ui/assets/logo.png` | 64 (hiện tại) | trong suốt | **Logo trên thanh điều hướng** của cả hai trang, và **cạnh tên ANCOL-ANI ở trang đăng nhập** của portal. Hiển thị qua component dùng chung `ui/components/AppLogo.vue` (ô nền sáng do CSS vẽ). Vite nhúng thẳng vào JS dạng base64 vì file nhỏ hơn 4KB. |
+| `ui/assets/logo.png` | 64 (hiện tại) | trong suốt | **Logo trên thanh điều hướng** của cả hai trang, và **cạnh tên Ancol-ani ở trang đăng nhập** của portal. Hiển thị qua component dùng chung `ui/components/AppLogo.vue` (ô nền sáng do CSS vẽ). Vite nhúng thẳng vào JS dạng base64 vì file nhỏ hơn 4KB. |
 | `cmd/syncserver/portal/public/favicon.ico`<br>`web/public/favicon.ico` | 16, 32, 48, 64 | **ô nền sáng bo góc** | **Favicon trên tab trình duyệt**: portal (`:9090`) và trang settings (`localhost:8788`). |
 | `cmd/syncserver/portal/public/favicon-32.png`<br>`web/public/favicon-32.png` | 32 | **ô nền sáng bo góc** | Favicon dạng PNG (trình duyệt hiện đại ưu tiên file này). |
 | `cmd/syncserver/portal/public/apple-touch-icon.png`<br>`web/public/apple-touch-icon.png` | 180 | **nền sáng kín** | Icon khi "Thêm vào màn hình chính" trên iPhone/iPad. |

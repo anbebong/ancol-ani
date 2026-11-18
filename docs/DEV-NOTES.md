@@ -79,6 +79,9 @@ wails build -s        # -s = skip frontend build
 |---|---|---|---|
 | POST | `/auth/register`, `/auth/login` | không | trả `{token}` |
 | POST | `/auth/logout` | có | revoke session |
+| POST | `/auth/token` | có | cấp thêm 1 token **mới, phiên riêng** cho cùng tài khoản (dùng để portal và client không bao giờ dùng chung 1 phiên, xem mục 5) |
+| POST | `/me/password` | có | đổi mật khẩu `{currentPassword, newPassword}`; sai mật khẩu cũ → 403; thu hồi mọi phiên khác |
+| POST | `/admin/users/{id}/reset-password` | admin | trả `{tempPassword}` một lần, thu hồi mọi phiên của user đó |
 | GET | `/me` | có | `{username, isAdmin, gifQuota}` |
 | GET/POST | `/me/gifs` | có | list / upload mới (409 nếu đầy quota) |
 | GET | `/me/gifs/{id}/image` | có | blob ảnh, scoped theo owner |
@@ -98,18 +101,23 @@ Admin đầu tiên set bằng CLI: `syncserver.exe -make-admin <username>` (khô
 Không dùng OAuth/OIDC thật, dùng pattern "browser-redirect" giống `gh auth login`:
 
 1. `web/` (local, `localhost:8788`) bấm "Liên kết tài khoản" → lưu địa chỉ server vào `localStorage`, redirect tới `{server}/?callback=http://localhost:8788/`.
-2. Portal: nếu **tab portal đã có session sẵn** (đăng nhập từ trước) và có `?callback=`, **redirect ngay** bằng token hiện có — không chờ login mới (tránh bug "kẹt ở portal" nếu đã login từ trước).
-3. Nếu chưa login: login/register xong → redirect về `callback?token=...`.
-4. `web/` nhận lại `?token=` trên URL của chính nó, lưu vào `localStorage` riêng của **trang này** (khác hẳn `localStorage` của portal — 2 origin khác nhau). Go app (`app.go`) **không bao giờ biết** gì về token này.
-5. Token hết hạn/bị revoke → mọi lời gọi `authedFetch()` trong `sync.js` tự phát hiện `401`, xoá token, quay về trạng thái "chưa liên kết" (không cần reload tay).
+2. Portal: nếu **tab portal đã có session sẵn** (đăng nhập từ trước) và có `?callback=`, **redirect ngay** không chờ login mới (tránh bug "kẹt ở portal"). Nếu session đó đã hết hạn thì hiện trang đăng nhập như bước 3.
+3. Nếu chưa login: login/register xong thì portal **giữ phiên của chính nó** rồi redirect về `callback?token=...`.
+   - Ở cả bước 2 và 3, token gửi cho client là token **mới** xin từ `POST /auth/token` (`sendTokenToClient()` trong `portal/src/session.js`), **không phải** token của portal. Hai bên luôn có phiên riêng: đăng xuất portal không làm client mất liên kết, và ngược lại. Đừng quay lại kiểu đưa thẳng token của portal cho client.
+4. `web/` nhận lại `?token=` trên URL của chính nó (`consumeCallbackToken()` trong `web/src/account.js`), lưu vào `localStorage` riêng của **trang này** (khác hẳn `localStorage` của portal — 2 origin khác nhau). Go app (`app.go`) **không bao giờ biết** gì về token này.
+   - **Router của `web/` phải được tạo SAU bước này** (`createAppRouter()` gọi trong `main.js` sau khi xử lý token). `createWebHashHistory()` đọc URL lúc khởi tạo, tạo sớm thì kẹt ở trang cũ và `?token=` dính vào mọi URL.
+5. Token hết hạn/bị revoke → mọi lời gọi `authedFetch()`/`serverApi()` trong `web/src/account.js` tự phát hiện `401`, xoá token, báo toast và đưa về trang Tài khoản (không cần reload tay).
+6. **"Mở portal" từ client (đăng nhập sẵn):** nút ở trang Tài khoản của client mở `{server}/#/sso?t=<token của client>&to=/account`. Trang `portal/src/views/SsoView.vue` đổi token đó lấy một phiên portal riêng qua `POST /auth/token`, rồi `router.replace(to)` để token không còn trong URL/lịch sử. Token sai/hết hạn → về trang đăng nhập. Token đặt sau `#` nên trình duyệt không gửi lên server/log.
 
-## 6. GIF hiển thị — luôn qua canvas, không dùng `<img>`
+Giới hạn còn lại: mọi token sống **1 giờ** (`tokenTTL` trong `auth.go`), chưa có refresh token. Hết giờ thì client phải liên kết lại và portal phải đăng nhập lại (xem mục 8).
 
-Chromium's native `<img>` GIF animation có bug treo vĩnh viễn sau một lúc loop (tái hiện được cả trên Chrome thường). Toàn bộ nơi hiển thị GIF trong `web/` (preview chính, thư viện cá nhân, thư viện public) đều phải vẽ qua `web/src/gif-player.js::playGif(canvas, getBufferFn, isCurrentFn)` — **không** gắn trực tiếp `blob` vào `<img src>`.
+## 6. GIF hiển thị — luôn qua canvas, không dùng `<img>` (trang settings)
+
+Chromium's native `<img>` GIF animation có bug treo vĩnh viễn sau một lúc loop (tái hiện được cả trên Chrome thường). Toàn bộ nơi hiển thị GIF trong `web/` (preview widget, thư viện, khám phá) đều phải dùng component `web/src/components/GifCanvas.vue` (bọc `web/src/gif-player.js::playGif`) — **không** gắn `blob` vào `<img src>`. (Portal của server hiện vẫn dùng `<img>` qua `GifImage.vue`.)
 
 ## 7. UI dialog — dùng modal pixel-style, không dùng `confirm()`/`prompt()` của browser
 
-`web/src/modal.js` cung cấp `showModal({message, fields, confirmText, cancelText})` và `confirmDialog(message, opts)`, style khớp theme pixel. Dùng cho mọi xác nhận xoá / nhập tên+tag khi share trong `sync.js` — không gọi `window.confirm`/`window.prompt` trần.
+`ui/modal.js` (dùng chung) cung cấp `confirmDialog(message, { confirmText, cancelText })`, style khớp theme pixel. Dùng cho mọi xác nhận xoá / áp dụng / hủy liên kết ở cả portal lẫn trang settings — không gọi `window.confirm`/`window.prompt` trần. Nhập tên + tag khi chia sẻ thì làm inline ngay trên thẻ GIF (giống portal), không dùng hộp thoại.
 
 ## 8. Việc còn thiếu / ngoài scope hiện tại
 
@@ -117,3 +125,35 @@ Chromium's native `<img>` GIF animation có bug treo vĩnh viễn sau một lúc
 - Chưa có refresh token — token JWT 1h hết là phải liên kết lại (chấp nhận đánh đổi theo yêu cầu ban đầu).
 - Chưa đẩy 2 chiều tự động (client không tự poll nền để kéo GIF mới) — mọi hành động đều là bấm tay.
 - `JWT_SECRET` chưa set qua env khi deploy thật — đang dùng fallback dev không an toàn, phải set trước khi deploy ngoài localhost.
+
+## 9. Phát hành version mới của app desktop
+
+Version của app nằm ở **3 chỗ, phải sửa cùng lúc**:
+
+| File | Dùng làm gì |
+|---|---|
+| `VERSION` | Nguồn chính. `app.go` nhúng (`//go:embed VERSION`) và trả qua `GET /version`; trang settings hiện ở chân trang và trang **Có gì mới**. |
+| `wails.json` → `info.productVersion` | Version ghi vào file `ancol-ani.exe` (Properties → Details) và bộ cài NSIS. |
+| `CHANGELOG.md` | Mục mới `## <version> — <YYYY-MM-DD>` ở **trên cùng**. |
+
+`CHANGELOG.md` cũng được `app.go` nhúng (`//go:embed CHANGELOG.md`) và trả qua `GET /changelog`. Trang **Có gì mới** (`web/src/views/ChangelogView.vue`, parser trong `web/src/appInfo.js`) đọc file đó, nên **giữ đúng định dạng**:
+
+```markdown
+## 1.2.0 — 2026-12-01
+
+### Mới
+- Mô tả theo góc nhìn người dùng, có thể dùng `code` và **đậm**.
+
+### Thay đổi
+- ...
+
+### Sửa lỗi
+- ...
+```
+
+- Parser chỉ hiểu `## version — ngày`, `### nhóm`, và dòng `- ...`. Đoạn văn khác bị bỏ qua (nên phần giới thiệu đầu file không hiện).
+- Nhóm tô màu theo tên: "Mới/New" xanh, "Thay đổi/Changed" vàng, "Sửa lỗi/Fix" đỏ.
+- Changelog chỉ ghi thay đổi **của app desktop** (widget + trang settings), viết cho người dùng chứ không phải dev. Thay đổi riêng của server/portal không ghi ở đây.
+- Khi app chạy version khác version người dùng xem lần cuối (`localStorage['ancol-ani-seen-version']`), trang settings hiện chấm hồng cạnh mục **Có gì mới** và số version; mở trang đó là chấm tắt. Lần đầu mở trên một trình duyệt thì không báo.
+
+Thứ tự: sửa 3 file trên → `cd web && npm run build` → build frontend + `wails build -s` (mục 2) → commit `chore(release): <version>`.
