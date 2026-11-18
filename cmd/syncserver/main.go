@@ -38,6 +38,9 @@ var webFiles embed.FS
 type server struct {
 	store     *Store
 	jwtSecret []byte
+	limits    *limiter
+	// ALLOW_REGISTER=false closes sign-up (existing accounts keep working).
+	allowRegister bool
 }
 
 func main() {
@@ -67,7 +70,15 @@ func main() {
 		secret = "dev-only-insecure-secret-change-me"
 	}
 
-	s := &server{store: store, jwtSecret: []byte(secret)}
+	s := &server{
+		store:         store,
+		jwtSecret:     []byte(secret),
+		limits:        newLimiter(),
+		allowRegister: envOr("ALLOW_REGISTER", "true") != "false",
+	}
+	if !s.allowRegister {
+		log.Println("registration closed (ALLOW_REGISTER=false)")
+	}
 
 	webFS, err := fs.Sub(webFiles, "portal/dist")
 	if err != nil {

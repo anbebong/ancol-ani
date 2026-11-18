@@ -27,8 +27,16 @@ type authClaims struct {
 // can't be revoked before it expires, so the session table is what makes
 // logout actually work.
 func (s *server) issueToken(userID int64) (string, error) {
+	return s.issueTokenUntil(userID, time.Now().Add(tokenTTL))
+}
+
+// issueTokenUntil is issueToken with an explicit expiry, capped at
+// tokenTTL from now (POST /auth/token passes the source session's expiry).
+func (s *server) issueTokenUntil(userID int64, expiresAt time.Time) (string, error) {
 	jti := randomHex(16)
-	expiresAt := time.Now().Add(tokenTTL)
+	if max := time.Now().Add(tokenTTL); expiresAt.After(max) {
+		expiresAt = max
+	}
 
 	if err := s.store.CreateSession(jti, userID, expiresAt); err != nil {
 		return "", err

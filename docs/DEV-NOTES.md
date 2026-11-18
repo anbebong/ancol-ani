@@ -181,3 +181,18 @@ Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mo
 - **Quay lại dino-race:** chạy `bash deploy/deploy-arm.sh` trong repo dino-race. Script đó ghi đè lại `~/run.sh` bản dino-race; dữ liệu dino-race (`~/server`, `~/users.json`, `~/admin.json`) vẫn còn nguyên. Bản `run.sh` dino-race cũ cũng được lưu ở `~/run.sh.dinorace-backup`.
 - Ngược lại: **đừng chạy `deploy-arm.sh` của dino-race** nếu muốn giữ Ancol-ani, vì nó sẽ đưa dino-race trở lại cổng 7879.
 - `deploy/phone/maintenance-on.sh` là bản của repo này: giống bản dino-race nhưng kill thêm `ancolani-sync-arm64`.
+
+## 11. Giới hạn bảo mật của sync server (đang public)
+
+| Bảo vệ | Ở đâu | Giới hạn |
+|---|---|---|
+| Bom GIF (file nhỏ giải nén ra hàng GB RAM, làm sập điện thoại) | `gifguard.go`: quét cấu trúc GIF **trước** `gif.DecodeAll`, không giải nén | mỗi cạnh ≤ 1024, ≤ 500 frame, tổng w×h các frame ≤ 64M pixel; tối đa 2 lần giải mã cùng lúc. Test: `go test ./cmd/syncserver -run TestCheckGif` |
+| Đoán mật khẩu | `ratelimit.go` + `handleLogin` | 20 lần đăng nhập / 10 phút / IP; sai 5 lần / 15 phút / username thì khóa username đó (cả khi đúng mật khẩu) |
+| Đoán mật khẩu cũ qua phiên bị lộ | `handleChangePassword` | sai mật khẩu hiện tại 5 lần / 15 phút → khóa |
+| Đăng ký hàng loạt | `handleRegister` | 5 tài khoản / giờ / IP. Đóng hẳn đăng ký: env `ALLOW_REGISTER=false` (thêm vào dòng chạy server trong `deploy/phone/run.sh`) |
+| Kéo dài token bị lộ qua `/auth/token` | `handleIssueToken`, `issueTokenUntil` | token mới **cùng hạn** với phiên gốc, không bao giờ lâu hơn |
+| Body JSON lớn | `maxJSONBody` | 64KB cho login/register/đổi mật khẩu |
+
+- **IP thật:** request đi qua cloudflared trên chính điện thoại (kết nối loopback), nên IP người dùng lấy từ header `CF-Connecting-IP`. Header này **chỉ được tin khi kết nối đến từ loopback** (`clientIP()` trong `ratelimit.go`); ai gọi thẳng cổng 7879 từ LAN không giả được. Đã kiểm chứng trên điện thoại: mỗi IP có bộ đếm riêng.
+- Bộ đếm nằm trong RAM: khởi động lại server là reset. Đủ để làm chậm dò mật khẩu/spam trên 1 server nhỏ.
+- Còn chưa làm (mức trung bình/thấp): timeout cho HTTP server, header bảo mật (CSP, `X-Frame-Options`, `nosniff`), bind `127.0.0.1` thay vì `0.0.0.0`, `jwt.WithValidMethods`.

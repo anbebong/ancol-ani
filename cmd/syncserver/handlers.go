@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const maxGifBytes = 5 << 20 // 5MB
@@ -21,8 +22,16 @@ type credentials struct {
 }
 
 func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if !s.allowRegister {
+		http.Error(w, "dang ky tai khoan moi dang tam dong", http.StatusForbidden)
+		return
+	}
+	if ok, retry := s.limits.allow("register:"+clientIP(r), registerPerIP, registerPerIPWindw); !ok {
+		tooMany(w, retry)
+		return
+	}
 	var creds credentials
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxJSONBody)).Decode(&creds); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
@@ -55,14 +64,27 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if ok, retry := s.limits.allow("login:"+clientIP(r), loginPerIP, loginPerIPWindow); !ok {
+		tooMany(w, retry)
+		return
+	}
 	var creds credentials
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxJSONBody)).Decode(&creds); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// Per-username lock after repeated wrong passwords, so guessing one
+	// account's password is slow even when spread across many IPs.
+	userKey := "login-fail:" + strings.ToLower(creds.Username)
+	if blocked, retry := s.limits.blocked(userKey, loginFailsPerUser); blocked {
+		tooMany(w, retry)
 		return
 	}
 
 	user, err := s.store.GetUserByUsername(creds.Username)
 	if err == ErrNotFound || (err == nil && !checkPassword(user.PasswordHash, creds.Password)) {
+		s.limits.fail(userKey, loginFailWindow)
 		http.Error(w, "sai username hoac password", http.StatusUnauthorized)
 		return
 	}
@@ -71,8 +93,12 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.limits.clear(userKey)
 	s.respondWithToken(w, user.ID)
 }
+
+// Small JSON bodies only (credentials, share name/tags, ...).
+const maxJSONBody = 64 << 10
 
 // handleIssueToken: POST /auth/token (authenticated). Issues a brand-new,
 // independent session token for the caller's own account. Used so the
@@ -81,16 +107,35 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 //     fresh token from here (logging out of one doesn't unlink the other);
 //   - "open portal" from the client: the portal trades the client's token
 //     for its own session here instead of asking to log in again.
+//
+// The new session never outlives the one it was issued from (same expiry),
+// so a leaked token can't be swapped for fresh ones forever to dodge the
+// 1h token lifetime.
 func (s *server) handleIssueToken(w http.ResponseWriter, r *http.Request, userID int64) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.respondWithToken(w, userID)
+	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	_, jti, err := s.verifyToken(raw)
+	if err != nil {
+		http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	expiresAt, err := s.store.SessionExpiry(jti)
+	if err != nil {
+		http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	s.respondWithTokenUntil(w, userID, expiresAt)
 }
 
 func (s *server) respondWithToken(w http.ResponseWriter, userID int64) {
-	token, err := s.issueToken(userID)
+	s.respondWithTokenUntil(w, userID, time.Now().Add(tokenTTL))
+}
+
+func (s *server) respondWithTokenUntil(w http.ResponseWriter, userID int64, expiresAt time.Time) {
+	token, err := s.issueTokenUntil(userID, expiresAt)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -125,12 +170,20 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request, us
 		CurrentPassword string `json:"currentPassword"`
 		NewPassword     string `json:"newPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxJSONBody)).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	if len(body.NewPassword) < 6 {
 		http.Error(w, "mat khau moi phai it nhat 6 ky tu", http.StatusBadRequest)
+		return
+	}
+
+	// Same lock as login: a stolen session must not be able to brute-force
+	// the current password through this endpoint either.
+	failKey := "password-fail:" + strconv.FormatInt(userID, 10)
+	if blocked, retry := s.limits.blocked(failKey, loginFailsPerUser); blocked {
+		tooMany(w, retry)
 		return
 	}
 
@@ -140,9 +193,11 @@ func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 	if !checkPassword(user.PasswordHash, body.CurrentPassword) {
+		s.limits.fail(failKey, loginFailWindow)
 		http.Error(w, "mat khau hien tai khong dung", http.StatusForbidden)
 		return
 	}
+	s.limits.clear(failKey)
 	if body.CurrentPassword == body.NewPassword {
 		http.Error(w, "mat khau moi phai khac mat khau hien tai", http.StatusBadRequest)
 		return
@@ -505,6 +560,16 @@ func readGifUpload(r *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, errTooLarge
 	}
+
+	// Reject decompression bombs before inflating anything (gifguard.go),
+	// and cap how many decodes run at once.
+	if err := checkGifSize(raw); err != nil {
+		return nil, err
+	}
+	if err := acquireGifSlot(r.Context()); err != nil {
+		return nil, errTooLarge
+	}
+	defer releaseGifSlot()
 
 	decoded, err := gif.DecodeAll(bytes.NewReader(raw))
 	if err != nil {

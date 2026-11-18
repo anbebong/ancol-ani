@@ -348,6 +348,23 @@ func (s *Store) IsSessionValid(jti string) (int64, error) {
 	return row.UserID, nil
 }
 
+// SessionExpiry returns when a still-valid session expires.
+func (s *Store) SessionExpiry(jti string) (time.Time, error) {
+	var raw string
+	err := s.db.Get(&raw, s.db.Rebind(`SELECT expires_at FROM sessions WHERE jti = ? AND revoked_at IS NULL`), jti)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil || time.Now().UTC().After(t) {
+		return time.Time{}, ErrNotFound
+	}
+	return t, nil
+}
+
 func (s *Store) RevokeSession(jti string) error {
 	_, err := s.db.Exec(s.db.Rebind(`UPDATE sessions SET revoked_at = ? WHERE jti = ?`),
 		time.Now().UTC().Format(time.RFC3339), jti)
