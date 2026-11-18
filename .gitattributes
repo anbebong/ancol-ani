@@ -1,0 +1,4 @@
+# Shell scripts run on Linux/Termux (deploy/phone/*.sh is uploaded to the
+# phone as-is): always LF, even on Windows with core.autocrlf=true -
+# CRLF makes bash fail with "$'\r': command not found".
+*.sh text eol=lf
