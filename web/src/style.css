@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a14;
+  --panel: #14142b;
+  --ink: #e8e8f0;
+  --muted: #8d89a8;
+  --accent-1: #7c6bff;
+  --accent-2: #ff6bd6;
+  --border: #35335a;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  background-image:
+    linear-gradient(var(--panel) 1px, transparent 1px),
+    linear-gradient(90deg, var(--panel) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Flat panel, square corners, hard offset shadow - no blur, the pixel-art look */
+.pixel-box {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+}
+
+.pixel-btn {
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 #000;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  transition: filter .15s ease;
+}
+.pixel-btn:hover { filter: brightness(1.08); }
+.pixel-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+
+.pixel-btn-ghost {
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 #000;
+  background: var(--panel);
+  color: var(--muted);
+}
+.pixel-btn-ghost:hover { color: var(--ink); }
+.pixel-btn-ghost:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+
+.pixel-input {
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--ink);
+}
+.pixel-input::placeholder { color: var(--muted); }
+.pixel-input:focus { outline: none; border-color: var(--accent-1); }
+
+.pixel-dropzone {
+  border: 2px dashed var(--border);
+  background: var(--bg);
+}
+.pixel-dropzone.drag { border-color: var(--accent-1); }
