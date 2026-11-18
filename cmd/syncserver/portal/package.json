@@ -1,0 +1,17 @@
+{
+  "name": "ancol-ani-portal",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.6.2",
+    "daisyui": "^4.12.24",
+    "lucide-static": "^0.460.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^3.4.19",
+    "vite": "^7.0.0"
+  }
+}

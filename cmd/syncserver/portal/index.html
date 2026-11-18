@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ancol-ani sync</title>
+</head>
+<body class="min-h-screen bg-base-200">
+<div class="max-w-2xl mx-auto px-4 py-8 flex flex-col gap-6">
+
+  <div class="navbar bg-base-100 rounded-box shadow-sm px-5">
+    <div class="flex-1 flex items-center gap-2">
+      <span data-icon="image" class="w-5 h-5 [&>svg]:w-5 [&>svg]:h-5"></span>
+      <span class="text-lg font-bold">ancol-ani sync</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="/gallery.html" class="link link-primary link-hover text-sm font-semibold flex items-center gap-1">
+        <span data-icon="globe" class="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4"></span>
+        Thư viện public
+      </a>
+      <span class="badge badge-ghost flex items-center gap-1" id="whoami"></span>
+    </div>
+  </div>
+
+  <!-- Chưa đăng nhập: chỉ thấy form này -->
+  <div id="auth-box" class="card bg-base-100 shadow-sm">
+    <div class="card-body gap-4">
+      <div class="alert alert-info text-xs hidden" id="callback-note">Đăng nhập để liên kết tài khoản với app ancol-ani trên máy bạn.</div>
+      <div role="tablist" class="tabs tabs-boxed">
+        <a role="tab" class="tab tab-active" id="tab-login" data-mode="login">Đăng nhập</a>
+        <a role="tab" class="tab" id="tab-register" data-mode="register">Đăng ký</a>
+      </div>
+      <input type="text" id="username" placeholder="Tên đăng nhập" class="input input-bordered w-full" required/>
+      <input type="password" id="password" placeholder="Mật khẩu (tối thiểu 6 ký tự)" class="input input-bordered w-full" required/>
+      <button id="auth-submit-btn" type="button" class="btn btn-primary w-full">Đăng nhập</button>
+      <p class="text-error text-sm min-h-[1.25rem]" id="auth-error"></p>
+    </div>
+  </div>
+
+  <!-- Đã đăng nhập: mọi user thường đều thấy phần này -->
+  <div id="account-box" class="hidden flex flex-col gap-6">
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <div class="flex items-center justify-between">
+          <h2 class="card-title text-sm uppercase tracking-wide text-base-content/70">
+            Thư viện GIF của tôi (<span id="gif-count">0</span>/<span id="gif-quota">3</span>)
+          </h2>
+          <button id="logout-btn" type="button" class="btn btn-ghost btn-xs gap-1">
+            <span data-icon="log-out" class="w-3.5 h-3.5 [&>svg]:w-3.5 [&>svg]:h-3.5"></span>
+            Đăng xuất
+          </button>
+        </div>
+
+        <p class="text-xs text-base-content/60">
+          Mỗi GIF có thể bật/tắt chia sẻ công khai độc lập. Thiết bị khác đăng nhập cùng tài khoản tự chọn 1 GIF trong thư viện này để đồng bộ.
+        </p>
+
+        <div id="gif-grid" class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3"></div>
+        <p class="text-base-content/60 text-sm hidden" id="gif-empty">Chưa có GIF nào, tải lên 1 cái bên dưới.</p>
+
+        <div class="divider my-0"></div>
+
+        <div class="form-control" id="upload-row">
+          <label class="label"><span class="label-text text-xs uppercase font-semibold text-base-content/60">Thêm GIF mới</span></label>
+          <div class="flex gap-2 flex-wrap">
+            <input type="file" id="gif-file" accept=".gif,image/gif" class="file-input file-input-bordered file-input-sm flex-1"/>
+            <button id="upload-btn" type="button" class="btn btn-primary btn-sm gap-1">
+              <span data-icon="arrow-up" class="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4"></span>
+              Tải lên
+            </button>
+          </div>
+        </div>
+        <p class="text-warning text-xs hidden" id="quota-full-note">Đã đạt số lượng GIF tối đa. Xóa 1 cái trong thư viện để thêm GIF mới.</p>
+
+        <p class="text-error text-sm min-h-[1.25rem]" id="account-error"></p>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-sm uppercase tracking-wide text-base-content/70">Lịch sử chia sẻ</h2>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead><tr><th>Link</th><th>Bắt đầu</th><th>Kết thúc</th><th>Trạng thái</th></tr></thead>
+            <tbody id="history-rows"></tbody>
+          </table>
+        </div>
+        <p class="text-base-content/60 text-xs hidden" id="history-empty">Chưa có lượt chia sẻ nào.</p>
+      </div>
+    </div>
+
+    <!-- Chỉ hiện khi tài khoản đăng nhập có quyền admin -->
+    <div id="admin-section" class="hidden flex-col gap-6">
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-sm uppercase tracking-wide text-base-content/70 flex items-center gap-1.5">
+            <span data-icon="users" class="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4"></span>
+            Quản trị — Danh sách user
+          </h2>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead><tr><th>ID</th><th>Username</th><th>Admin</th><th>Quota GIF</th><th>Đang có</th><th>Public</th><th></th></tr></thead>
+              <tbody id="user-rows"></tbody>
+            </table>
+          </div>
+          <p class="text-error text-sm min-h-[1.25rem]" id="admin-error"></p>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-sm uppercase tracking-wide text-base-content/70 flex items-center gap-1.5">
+            <span data-icon="globe" class="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4"></span>
+            Quản trị — GIF public toàn hệ thống
+          </h2>
+          <input type="text" id="admin-public-search" placeholder="Tìm theo tên hoặc tag..." class="input input-bordered input-sm w-full"/>
+          <div id="public-grid" class="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

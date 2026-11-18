@@ -7,7 +7,7 @@
 <link rel="icon" href="/favicon.ico" type="image/x-icon"/>
 </head>
 <body class="min-h-screen flex justify-center p-4 sm:p-10">
-<div class="w-full max-w-md flex flex-col gap-4">
+<div class="w-full max-w-3xl flex flex-col gap-4">
 
   <div class="pixel-box flex items-center justify-between gap-3 p-4">
     <div class="flex items-center gap-3">
@@ -73,6 +73,44 @@
                   class="pixel-btn-ghost rounded-lg w-full px-4 py-3 text-base sm:text-sm font-semibold"></button>
         </form>
       </div>
+    </div>
+  </div>
+
+  <div class="pixel-box p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <svg viewBox="0 0 24 24" fill="none" class="w-[14px] h-[14px] text-[var(--accent-1)] flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]" data-i18n="syncLabel"></h2>
+    </div>
+
+    <!-- Chưa liên kết: chỉ hiện ô địa chỉ server + nút liên kết -->
+    <div id="sync-unlinked" class="flex flex-col gap-2.5">
+      <input type="text" id="sync-server-url" data-i18n-placeholder="syncServerPlaceholder"
+             class="pixel-input w-full rounded-lg px-3 py-3 text-base sm:text-sm"/>
+      <button id="sync-link-btn" type="button" data-i18n="syncLinkBtn"
+              class="pixel-btn rounded-lg w-full px-4 py-3 text-base sm:text-sm font-semibold"></button>
+    </div>
+
+    <!-- Đã liên kết: chọn 1 GIF trong thư viện tài khoản để đồng bộ -->
+    <div id="sync-linked" class="hidden flex-col gap-2.5">
+      <p class="text-sm sm:text-xs text-[var(--muted)]">
+        <span data-i18n="syncLinkedAs"></span> <span id="sync-username" class="font-semibold text-[var(--ink)]"></span>
+      </p>
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2" data-i18n="syncPersonalLabel"></p>
+        <div id="sync-library-personal" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5"></div>
+        <p id="sync-library-personal-empty" class="hidden text-sm sm:text-xs text-[var(--muted)]" data-i18n="syncLibraryEmpty"></p>
+      </div>
+
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2" data-i18n="syncPublicLabel"></p>
+        <div id="sync-library-public" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5"></div>
+        <p id="sync-library-public-empty" class="hidden text-sm sm:text-xs text-[var(--muted)]" data-i18n="syncPublicEmpty"></p>
+      </div>
+
+      <button id="sync-unlink-btn" type="button" data-i18n="syncUnlinkBtn"
+              class="pixel-btn-ghost rounded-lg w-full px-4 py-3 text-base sm:text-sm font-semibold"></button>
     </div>
   </div>
 
