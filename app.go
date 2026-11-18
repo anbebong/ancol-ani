@@ -100,10 +100,10 @@ func (a *App) startup(ctx context.Context) {
 	removeMinimumSizeConstraint(hwnd)
 	hideFromTaskbar(ctx, hwnd)
 	runtime.WindowSetSize(ctx, petWidth, petHeight)
-	positionBottomRight(ctx, hwnd)
+	positionBottomRight(hwnd)
 	makeClickThrough(hwnd)
 
-	go watchForMonitorChanges(ctx, hwnd)
+	go watchForMonitorChanges(hwnd)
 	go startLocalServer(ctx)
 }
 
@@ -214,43 +214,95 @@ const monitorDefaultToPrimary = 1
 var (
 	procMonitorFromWindow = user32.NewProc("MonitorFromWindow")
 	procGetMonitorInfo    = user32.NewProc("GetMonitorInfoW")
+	procGetWindowRect     = user32.NewProc("GetWindowRect")
+	procGetDpiForWindow   = user32.NewProc("GetDpiForWindow")
+	procSetWindowPos      = user32.NewProc("SetWindowPos")
 )
 
-// Wails' WindowSetPosition adds the window's own monitor work-area origin
-// (rcWork.Left/Top) to whatever x/y we pass (see ControlBase.SetPos), so
-// x/y here must be computed from that *same* rcWork - fetched via the same
-// hwnd and the same Win32 call Wails itself uses - otherwise a DPI/API
-// mismatch shifts the result off-screen.
-func positionBottomRight(ctx context.Context, hwnd uintptr) {
+const (
+	swpNoSize     = 0x0001
+	swpNoMove     = 0x0002
+	swpNoActivate = 0x0010
+)
+
+// HWND_TOPMOST is (HWND)-1; kept as a variable so the conversion to
+// uintptr is a runtime sign-extension (same trick as gwlExStyle).
+var hwndTopmost = int32(-1)
+
+// positionBottomRight snaps the window to the bottom-right corner of its
+// monitor's work area (the screen minus the taskbar) and keeps it topmost.
+//
+// Everything here is in *physical* pixels: GetMonitorInfo, GetWindowRect
+// and SetWindowPos all use them for this (per-monitor DPI aware) process.
+// The previous version mixed physical work-area size with petWidth/
+// petHeight in logical pixels and went through Wails' WindowSetPosition;
+// at 125% display scaling that put the widget 11px past the right edge
+// and ~20px under the taskbar, where the (also topmost) taskbar hid it.
+func positionBottomRight(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 
 	work := currentWorkArea(hwnd)
-	workWidth := int(work.Right - work.Left)
-	workHeight := int(work.Bottom - work.Top)
 
-	x := workWidth - petWidth - margin
-	y := workHeight - petHeight - margin
-	runtime.WindowSetPosition(ctx, x, y)
+	var win rect
+	procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&win)))
+	w := win.Right - win.Left
+	h := win.Bottom - win.Top
+
+	m := int32(scaleForDPI(hwnd, margin))
+	x := work.Right - w - m
+	y := work.Bottom - h - m
+
+	procSetWindowPos.Call(hwnd, uintptr(hwndTopmost),
+		uintptr(x), uintptr(y), 0, 0,
+		swpNoSize|swpNoActivate)
 }
 
-// Re-checks the monitor's work area every couple of seconds and snaps the
-// window back to the bottom-right corner whenever it changed (monitor
-// turned off/on, resolution change, taskbar resize, etc). Wails has no
-// WM_DISPLAYCHANGE hook exposed, so this polls instead of reacting to the
-// event directly.
-func watchForMonitorChanges(ctx context.Context, hwnd uintptr) {
-	var lastWork rect
+// keepOnTop re-asserts HWND_TOPMOST without moving/resizing/activating.
+// Windows can push a topmost window down the z-order (e.g. when another
+// topmost window - the taskbar, a fullscreen app - is activated), and
+// WS_EX_TOPMOST set once at creation never re-applies itself.
+func keepOnTop(hwnd uintptr) {
+	if hwnd == 0 {
+		return
+	}
+	procSetWindowPos.Call(hwnd, uintptr(hwndTopmost), 0, 0, 0, 0,
+		swpNoMove|swpNoSize|swpNoActivate)
+}
+
+// scaleForDPI converts a length in logical (96-DPI) pixels to physical
+// pixels for the monitor the window is on.
+func scaleForDPI(hwnd uintptr, logical int) int {
+	dpi, _, _ := procGetDpiForWindow.Call(hwnd)
+	if dpi == 0 {
+		dpi = 96
+	}
+	return logical * int(dpi) / 96
+}
+
+// Every couple of seconds: snap the window back to the bottom-right
+// corner if the monitor's work area or the window's own size changed
+// (monitor turned off/on, resolution or scaling change, taskbar resize,
+// etc), and re-assert topmost. Wails has no WM_DISPLAYCHANGE hook
+// exposed, so this polls instead of reacting to the event directly.
+func watchForMonitorChanges(hwnd uintptr) {
+	var lastWork, lastWin rect
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		work := currentWorkArea(hwnd)
-		if work != lastWork {
-			lastWork = work
-			positionBottomRight(ctx, hwnd)
+		var win rect
+		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&win)))
+		size := rect{Right: win.Right - win.Left, Bottom: win.Bottom - win.Top}
+
+		if work != lastWork || size != lastWin {
+			lastWork, lastWin = work, size
+			positionBottomRight(hwnd)
+		} else {
+			keepOnTop(hwnd)
 		}
 	}
 }
