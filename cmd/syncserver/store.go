@@ -354,6 +354,32 @@ func (s *Store) RevokeSession(jti string) error {
 	return err
 }
 
+// RevokeOtherSessions revokes every still-active session of userID except
+// keepJTI (the one making the request), e.g. after a password change so a
+// leaked old password/token can't keep a foothold on other devices.
+func (s *Store) RevokeOtherSessions(userID int64, keepJTI string) error {
+	_, err := s.db.Exec(s.db.Rebind(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND jti <> ? AND revoked_at IS NULL`),
+		time.Now().UTC().Format(time.RFC3339), userID, keepJTI)
+	return err
+}
+
+func (s *Store) RevokeAllSessions(userID int64) error {
+	_, err := s.db.Exec(s.db.Rebind(`UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`),
+		time.Now().UTC().Format(time.RFC3339), userID)
+	return err
+}
+
+func (s *Store) SetPasswordHash(userID int64, passwordHash string) error {
+	res, err := s.db.Exec(s.db.Rebind(`UPDATE users SET password_hash = ? WHERE id = ?`), passwordHash, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // CreateGif adds a new GIF slot for userID, enforcing the user's quota.
 // Returns the new gif's id.
 func (s *Store) CreateGif(userID int64, data []byte) (int64, error) {

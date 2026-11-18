@@ -112,6 +112,18 @@ func checkPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
+// randomPassword returns an n-character password from an alphabet without
+// look-alike characters (0/O, 1/l/I) so it can be read out or retyped.
+func randomPassword(n int) string {
+	const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	b := make([]byte, n)
+	rand.Read(b)
+	for i := range b {
+		b[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return string(b)
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)

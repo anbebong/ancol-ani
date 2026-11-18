@@ -98,6 +98,59 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request, userID int64) 
 	})
 }
 
+// handleChangePassword: POST /me/password {currentPassword, newPassword}.
+// A wrong current password is 403, not 401 - 401 means "your session is
+// gone" to the portal, which would log the user out for a typo.
+func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request, userID int64) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if len(body.NewPassword) < 6 {
+		http.Error(w, "mat khau moi phai it nhat 6 ky tu", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.store.GetUserByID(userID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !checkPassword(user.PasswordHash, body.CurrentPassword) {
+		http.Error(w, "mat khau hien tai khong dung", http.StatusForbidden)
+		return
+	}
+	if body.CurrentPassword == body.NewPassword {
+		http.Error(w, "mat khau moi phai khac mat khau hien tai", http.StatusBadRequest)
+		return
+	}
+
+	hash, err := hashPassword(body.NewPassword)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetPasswordHash(userID, hash); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Keep the session that made this request, sign out everywhere else.
+	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if _, jti, err := s.verifyToken(raw); err == nil {
+		s.store.RevokeOtherSessions(userID, jti)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request, _ int64) {
 	// requireAuth already validated the token; re-parse just to get the
 	// jti so we know which session row to revoke.
@@ -341,9 +394,41 @@ func (s *server) dispatchAdminUsersSub(w http.ResponseWriter, r *http.Request, c
 		s.handleAdminDeleteUser(w, r, id)
 	case action == "quota" && r.Method == http.MethodPatch:
 		s.handleAdminSetQuota(w, r, id)
+	case action == "reset-password" && r.Method == http.MethodPost:
+		s.handleAdminResetPassword(w, r, callerID, id)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// handleAdminResetPassword: POST /admin/users/{id}/reset-password.
+// Sets a random temporary password, signs the user out everywhere, and
+// returns the temp password once so the admin can pass it on - the user
+// then changes it from their account page. Admins change their own
+// password via /me/password instead (that one checks the current one).
+func (s *server) handleAdminResetPassword(w http.ResponseWriter, r *http.Request, callerID, id int64) {
+	if id == callerID {
+		http.Error(w, "doi mat khau cua chinh minh o trang Tai khoan", http.StatusBadRequest)
+		return
+	}
+	temp := randomPassword(10)
+	hash, err := hashPassword(temp)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.SetPasswordHash(id, hash); err == ErrNotFound {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	s.store.RevokeAllSessions(id)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(map[string]string{"tempPassword": temp})
 }
 
 func (s *server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request, id int64) {
