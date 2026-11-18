@@ -11,7 +11,7 @@ Có 3 phần tách biệt:
 | **App desktop** (`ancol-ani.exe`) | repo root (`app.go`, `main.go`) | Widget hiển thị GIF/chữ trên màn hình. Build bằng **Wails**, không phải `go build` thường. |
 | **Web local** (trang settings `localhost:8788`) | `web/` (Vite project riêng) | Trang cấu hình của app — đổi GIF/chữ local, và khối "Đồng bộ tài khoản" để liên kết với syncserver. Nhúng vào `ancol-ani.exe` qua `go:embed web/dist`. |
 | **Syncserver** (`syncserver.exe`) | `cmd/syncserver/` | Server độc lập: tài khoản, thư viện GIF, chia sẻ công khai. Có DB riêng (SQLite file `data/ancol-ani.db`). |
-| **Portal** (web UI của syncserver) | `cmd/syncserver/portal/` (Vite project riêng) | Trang đăng nhập/đăng ký, quản lý thư viện cá nhân, admin, gallery public. Nhúng vào `syncserver.exe` qua `go:embed portal/dist`. |
+| **Portal** (web UI của syncserver) | `cmd/syncserver/portal/` (Vite + **Vue 3 + Vue Router**) | SPA nhiều trang: `#/login`, `#/library`, `#/history`, `#/gallery`, `#/admin/users`, `#/admin/public` (2 trang admin có guard theo `/me.isAdmin`). Dùng hash router nên server Go không cần SPA fallback. Mỗi trang là 1 file trong `src/views/`, component dùng chung trong `src/components/`, trạng thái đăng nhập ở `src/session.js`. Nhúng vào `syncserver.exe` qua `go:embed portal/dist`. |
 
 **3 project Vite độc lập, không dùng chung code:** `frontend/` (UI chính của widget), `web/` (settings local), `cmd/syncserver/portal/` (portal server).
 
@@ -23,6 +23,7 @@ Build đè lên file `.exe` đang chạy có thể fail hoặc để lại bản
 ```bash
 # nếu sửa portal (web):
 cd cmd/syncserver/portal && npm run build
+# (dev có hot reload: chạy server Go ở :9090 rồi `npm run dev` - Vite tự proxy /auth /me /public /admin sang :9090)
 
 # luôn kill server cũ trước khi build lại binary:
 taskkill //F //PID <pid của syncserver.exe>   # lấy PID qua: tasklist | grep -i syncserver.exe
