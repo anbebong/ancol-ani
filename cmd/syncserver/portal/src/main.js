@@ -1,6 +1,7 @@
 import './style.css';
 import { getToken, setToken, clearToken, setUsername, clearUsername, api, showError } from './api.js';
 import { renderIcons, iconHTML } from './icons.js';
+import { confirmDialog } from './modal.js';
 
 const authBox = document.getElementById('auth-box');
 const accountBox = document.getElementById('account-box');
@@ -132,13 +133,13 @@ function renderGifCard(g) {
                 <p class="text-xs font-semibold truncate">${g.name}</p>
                 ${g.tags ? `<p class="text-[10px] text-base-content/60 truncate">${g.tags.split(',').map((t) => '#' + t).join(' ')}</p>` : ''}
             </div>
-            <button class="btn btn-xs btn-error btn-outline w-full unshare-btn">Gỡ chia sẻ</button>
+            <button class="btn btn-xs btn-warning w-full unshare-btn">Gỡ chia sẻ</button>
         ` : `
             <input type="text" placeholder="Tên GIF (bắt buộc để chia sẻ)" class="input input-bordered input-xs w-full share-name-input"/>
             <input type="text" placeholder="Tag, phân tách bằng dấu phẩy" class="input input-bordered input-xs w-full share-tags-input"/>
-            <button class="btn btn-xs btn-secondary w-full share-btn">Chia sẻ</button>
+            <button class="btn btn-xs btn-success w-full share-btn">Chia sẻ</button>
         `}
-        <button class="btn btn-xs btn-ghost w-full delete-btn">Xóa</button>
+        <button class="btn btn-xs btn-error w-full delete-btn">Xóa</button>
         ${g.isPublic ? `<p class="text-[10px] break-all text-base-content/60">${location.origin}/public/${g.slug}</p>` : ''}
     `;
 
@@ -189,7 +190,7 @@ async function unshareGif(id) {
 }
 
 async function deleteGif(id) {
-    if (!confirm('Xóa GIF này khỏi thư viện?')) return;
+    if (!(await confirmDialog('Xóa GIF này khỏi thư viện?', { confirmText: 'Xóa' }))) return;
     accountError.textContent = '';
     try {
         await api(`/me/gifs/${id}`, { method: 'DELETE' });
@@ -348,7 +349,7 @@ async function setQuota(userId, quota) {
 }
 
 async function deleteUser(id) {
-    if (!confirm('Xóa user này và toàn bộ GIF của họ?')) return;
+    if (!(await confirmDialog('Xóa user này và toàn bộ GIF của họ?', { confirmText: 'Xóa' }))) return;
     try {
         await api('/admin/users/' + id, { method: 'DELETE' });
         await loadUsers();

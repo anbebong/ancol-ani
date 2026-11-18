@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Matches the pixel-art look of the desktop app's local settings page
+   (web/src/style.css) - dotted grid background, flat panels with a hard
+   offset shadow instead of blur, square-ish corners. */
+body {
+  background-image:
+    linear-gradient(var(--fallback-b1, oklch(var(--b1))) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fallback-b1, oklch(var(--b1))) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.card, .navbar, .alert {
+  box-shadow: 4px 4px 0 #000 !important;
+}
+
+.btn {
+  box-shadow: 3px 3px 0 #000 !important;
+  transition: filter .15s ease, transform .1s ease !important;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 #000 !important; }
+
+.input, .file-input {
+  box-shadow: none !important;
+}
