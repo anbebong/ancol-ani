@@ -57,6 +57,11 @@
 
         <div id="gif-grid" class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3"></div>
         <p class="text-base-content/60 text-sm hidden" id="gif-empty">Chưa có GIF nào, tải lên 1 cái bên dưới.</p>
+        <div class="flex items-center justify-center gap-3" id="gif-pager">
+          <button type="button" id="gif-prev" class="btn btn-ghost btn-xs">‹ Trước</button>
+          <span class="text-xs text-base-content/60" id="gif-page-label"></span>
+          <button type="button" id="gif-next" class="btn btn-ghost btn-xs">Sau ›</button>
+        </div>
 
         <div class="divider my-0"></div>
 
@@ -115,6 +120,11 @@
           </h2>
           <input type="text" id="admin-public-search" placeholder="Tìm theo tên hoặc tag..." class="input input-bordered input-sm w-full"/>
           <div id="public-grid" class="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3"></div>
+          <div class="flex items-center justify-center gap-3" id="admin-public-pager">
+            <button type="button" id="admin-public-prev" class="btn btn-ghost btn-xs">‹ Trước</button>
+            <span class="text-xs text-base-content/60" id="admin-public-page-label"></span>
+            <button type="button" id="admin-public-next" class="btn btn-ghost btn-xs">Sau ›</button>
+          </div>
         </div>
       </div>
     </div>

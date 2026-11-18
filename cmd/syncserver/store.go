@@ -379,15 +379,25 @@ func (s *Store) CreateGif(userID int64, data []byte) (int64, error) {
 	return res.LastInsertId()
 }
 
-func (s *Store) ListGifs(userID int64) ([]GifMeta, error) {
+// ListGifs returns one page of a user's gif library (newest last, same
+// order as before pagination existed) plus the total count so the UI
+// can render a page X/Y indicator.
+func (s *Store) ListGifs(userID int64, limit, offset int) ([]GifMeta, int64, error) {
 	gifs := []GifMeta{}
 	err := s.db.Select(&gifs, s.db.Rebind(`
 		SELECT id, is_public, COALESCE(slug, '') AS slug,
 		       COALESCE(name, '') AS name, COALESCE(tags, '') AS tags,
 		       created_at, updated_at
 		FROM gifs WHERE user_id = ? ORDER BY created_at ASC
-	`), userID)
-	return gifs, err
+		LIMIT ? OFFSET ?
+	`), userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var total int64
+	err = s.db.Get(&total, s.db.Rebind(`SELECT COUNT(*) FROM gifs WHERE user_id = ?`), userID)
+	return gifs, total, err
 }
 
 // DeleteGif removes a gif slot the caller owns.
@@ -505,32 +515,40 @@ func (s *Store) GetPublicBySlug(slug string) ([]byte, error) {
 	return data, err
 }
 
-// ListPublic lists public gifs, newest first, optionally filtered by a
-// free-text search over name+tags (q) and/or an exact publisher username
-// (user). Both filters are optional and combine with AND.
-func (s *Store) ListPublic(limit int, q, user string) ([]PublicEntry, error) {
-	entries := []PublicEntry{}
-	query := `
-		SELECT g.slug, u.username, COALESCE(g.name, '') AS name, COALESCE(g.tags, '') AS tags, g.updated_at
-		FROM gifs g
-		JOIN users u ON u.id = g.user_id
-		WHERE g.is_public = 1
-	`
+// ListPublic lists one page of public gifs, newest first, optionally
+// filtered by a free-text search over name+tags (q) and/or an exact
+// publisher username (user). Both filters are optional and combine with
+// AND. Returns the page plus the total count matching the same filters
+// (for a page X/Y indicator).
+func (s *Store) ListPublic(limit, offset int, q, user string) ([]PublicEntry, int64, error) {
+	where := `WHERE g.is_public = 1`
 	args := []any{}
 	if q != "" {
-		query += ` AND (g.name LIKE ? OR g.tags LIKE ?)`
+		where += ` AND (g.name LIKE ? OR g.tags LIKE ?)`
 		like := "%" + q + "%"
 		args = append(args, like, like)
 	}
 	if user != "" {
-		query += ` AND u.username = ?`
+		where += ` AND u.username = ?`
 		args = append(args, user)
 	}
-	query += ` ORDER BY g.updated_at DESC LIMIT ?`
-	args = append(args, limit)
 
-	err := s.db.Select(&entries, s.db.Rebind(query), args...)
-	return entries, err
+	entries := []PublicEntry{}
+	listQuery := `
+		SELECT g.slug, u.username, COALESCE(g.name, '') AS name, COALESCE(g.tags, '') AS tags, g.updated_at
+		FROM gifs g JOIN users u ON u.id = g.user_id
+		` + where + `
+		ORDER BY g.updated_at DESC LIMIT ? OFFSET ?
+	`
+	listArgs := append(append([]any{}, args...), limit, offset)
+	if err := s.db.Select(&entries, s.db.Rebind(listQuery), listArgs...); err != nil {
+		return nil, 0, err
+	}
+
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM gifs g JOIN users u ON u.id = g.user_id ` + where
+	err := s.db.Get(&total, s.db.Rebind(countQuery), args...)
+	return entries, total, err
 }
 
 func now(driver string) string {

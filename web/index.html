@@ -116,12 +116,22 @@
         </div>
         <div id="sync-library-personal" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5"></div>
         <p id="sync-library-personal-empty" class="hidden text-sm sm:text-xs text-[var(--muted)]" data-i18n="syncLibraryEmpty"></p>
+        <div class="flex items-center justify-center gap-3 mt-2">
+          <button type="button" id="sync-personal-prev" class="pixel-btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">‹</button>
+          <span class="text-xs text-[var(--muted)]" id="sync-personal-page-label"></span>
+          <button type="button" id="sync-personal-next" class="pixel-btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">›</button>
+        </div>
       </div>
 
       <div>
         <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2" data-i18n="syncPublicLabel"></p>
         <div id="sync-library-public" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5"></div>
         <p id="sync-library-public-empty" class="hidden text-sm sm:text-xs text-[var(--muted)]" data-i18n="syncPublicEmpty"></p>
+        <div class="flex items-center justify-center gap-3 mt-2">
+          <button type="button" id="sync-public-prev" class="pixel-btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">‹</button>
+          <span class="text-xs text-[var(--muted)]" id="sync-public-page-label"></span>
+          <button type="button" id="sync-public-next" class="pixel-btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold">›</button>
+        </div>
       </div>
 
       <button id="sync-unlink-btn" type="button" data-i18n="syncUnlinkBtn"

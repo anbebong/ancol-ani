@@ -109,14 +109,38 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request, _ int64) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+const defaultPageSize = 10
+const maxPageSize = 50
+
+// parsePagination reads ?page= (1-based, default 1) and ?pageSize=
+// (default 10, capped at 50 so a client can't force a huge unpaginated
+// dump by passing pageSize=100000).
+func parsePagination(r *http.Request) (page, pageSize, offset int) {
+	page = 1
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 {
+		page = v
+	}
+	pageSize = defaultPageSize
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err == nil && v > 0 {
+		pageSize = v
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	return page, pageSize, (page - 1) * pageSize
+}
+
 func (s *server) handleListGifs(w http.ResponseWriter, r *http.Request, userID int64) {
-	gifs, err := s.store.ListGifs(userID)
+	page, pageSize, offset := parsePagination(r)
+	gifs, total, err := s.store.ListGifs(userID, pageSize, offset)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(gifs)
+	json.NewEncoder(w).Encode(map[string]any{
+		"items": gifs, "total": total, "page": page, "pageSize": pageSize,
+	})
 }
 
 func (s *server) handleCreateGif(w http.ResponseWriter, r *http.Request, userID int64) {
@@ -240,18 +264,21 @@ func (s *server) handleMyShareHistory(w http.ResponseWriter, r *http.Request, us
 
 // handlePublicList supports ?q= (free-text over name+tags) and ?user=
 // (exact publisher username), so anyone can search by tag or by who
-// shared it.
+// shared it, plus ?page=/?pageSize= pagination.
 func (s *server) handlePublicList(w http.ResponseWriter, r *http.Request, _ int64) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	user := strings.TrimSpace(r.URL.Query().Get("user"))
+	page, pageSize, offset := parsePagination(r)
 
-	entries, err := s.store.ListPublic(100, q, user)
+	entries, total, err := s.store.ListPublic(pageSize, offset, q, user)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entries)
+	json.NewEncoder(w).Encode(map[string]any{
+		"items": entries, "total": total, "page": page, "pageSize": pageSize,
+	})
 }
 
 // normalizeTags trims whitespace around each comma-separated tag and

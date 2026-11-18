@@ -15,6 +15,8 @@ const USERNAME_KEY = 'ancol-ani-sync-username';
 const SERVER_KEY = 'ancol-ani-sync-server';
 const DEFAULT_SERVER = 'http://localhost:9090';
 
+const PAGE_SIZE = 10;
+
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function getUsername() { return localStorage.getItem(USERNAME_KEY); }
 function getServerUrl() { return localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER; }
@@ -64,6 +66,30 @@ export function initSync({ toast, reloadPreview }) {
         return res;
     }
 
+    // GIF bytes never change once a slot is created (sharing/unsharing
+    // only touches metadata), so once fetched + decoded they're kept for
+    // this page session - paging back and forth, or any action that
+    // reloads the current page, never re-downloads/re-decodes an image
+    // it already has.
+    const imageCache = new Map();
+    function cachedArrayBuffer(cacheKey, path) {
+        if (imageCache.has(cacheKey)) return Promise.resolve(imageCache.get(cacheKey));
+        return authedFetch(path)
+            .then((r) => r.arrayBuffer())
+            .then((buf) => { imageCache.set(cacheKey, buf); return buf; });
+    }
+
+    function renderPager(prevId, nextId, labelId, state, onChange) {
+        const totalPages = Math.max(1, Math.ceil(state.total / PAGE_SIZE));
+        document.getElementById(labelId).textContent = `${state.page}/${totalPages}`;
+        const prevBtn = document.getElementById(prevId);
+        const nextBtn = document.getElementById(nextId);
+        prevBtn.disabled = state.page <= 1;
+        nextBtn.disabled = state.page >= totalPages;
+        prevBtn.onclick = () => onChange(state.page - 1);
+        nextBtn.onclick = () => onChange(state.page + 1);
+    }
+
     async function loadQuota() {
         try {
             const res = await authedFetch('/me');
@@ -80,33 +106,42 @@ export function initSync({ toast, reloadPreview }) {
     let personalEpoch = 0;
     let publicEpoch = 0;
 
-    async function loadPersonalLibrary() {
+    let personalPage = 1;
+    let publicPage = 1;
+
+    async function loadPersonalLibrary(page = personalPage) {
         personalGrid.innerHTML = '';
         const epoch = ++personalEpoch;
         try {
-            const res = await authedFetch('/me/gifs');
+            const res = await authedFetch(`/me/gifs?page=${page}&pageSize=${PAGE_SIZE}`);
             if (!res.ok) throw new Error(await res.text());
-            const gifs = await res.json();
-            personalEmptyEl.classList.toggle('hidden', gifs.length > 0);
-            for (const g of gifs) {
+            const { items, total } = await res.json();
+            personalPage = page;
+            personalEmptyEl.classList.toggle('hidden', items.length > 0);
+            for (const g of items) {
                 personalGrid.appendChild(renderPersonalTile(g, () => epoch === personalEpoch));
             }
+            renderPager('sync-personal-prev', 'sync-personal-next', 'sync-personal-page-label',
+                { page: personalPage, total }, (p) => loadPersonalLibrary(p));
         } catch (err) {
             toast(err.message || String(err));
         }
     }
 
-    async function loadPublicLibrary() {
+    async function loadPublicLibrary(page = publicPage) {
         publicGrid.innerHTML = '';
         const epoch = ++publicEpoch;
         try {
-            const res = await authedFetch('/public');
+            const res = await authedFetch(`/public?page=${page}&pageSize=${PAGE_SIZE}`);
             if (!res.ok) throw new Error(await res.text());
-            const entries = await res.json();
-            publicEmptyEl.classList.toggle('hidden', entries.length > 0);
-            for (const entry of entries) {
+            const { items, total } = await res.json();
+            publicPage = page;
+            publicEmptyEl.classList.toggle('hidden', items.length > 0);
+            for (const entry of items) {
                 publicGrid.appendChild(renderPublicTile(entry, () => epoch === publicEpoch));
             }
+            renderPager('sync-public-prev', 'sync-public-next', 'sync-public-page-label',
+                { page: publicPage, total }, (p) => loadPublicLibrary(p));
         } catch (err) {
             toast(err.message || String(err));
         }
@@ -157,7 +192,7 @@ export function initSync({ toast, reloadPreview }) {
     function renderPublicTile(entry, isCurrent) {
         const tile = tileShell();
         const imagePath = '/public/' + entry.slug;
-        playGif(tile.querySelector('canvas'), () => authedFetch(imagePath).then((r) => r.arrayBuffer()), isCurrent);
+        playGif(tile.querySelector('canvas'), () => cachedArrayBuffer('public:' + entry.slug, imagePath), isCurrent);
 
         const label = document.createElement('p');
         label.className = 'text-[10px] text-center text-[var(--muted)] truncate';
@@ -176,7 +211,7 @@ export function initSync({ toast, reloadPreview }) {
     function renderPersonalTile(g, isCurrent) {
         const tile = tileShell();
         const imagePath = '/me/gifs/' + g.id + '/image';
-        playGif(tile.querySelector('canvas'), () => authedFetch(imagePath).then((r) => r.arrayBuffer()), isCurrent);
+        playGif(tile.querySelector('canvas'), () => cachedArrayBuffer('me:' + g.id, imagePath), isCurrent);
 
         const badge = document.createElement('p');
         badge.className = 'text-[10px] text-center truncate ' + (g.isPublic ? 'text-[var(--accent-1)]' : 'text-[var(--muted)]');
@@ -278,6 +313,7 @@ export function initSync({ toast, reloadPreview }) {
         try {
             const res = await authedFetch('/me/gifs/' + id, { method: 'DELETE' });
             if (!res.ok) throw new Error(await res.text());
+            imageCache.delete('me:' + id);
             toast(t('toastSyncDeleted'));
             loadPersonalLibrary();
             loadPublicLibrary();

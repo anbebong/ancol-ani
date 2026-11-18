@@ -78,20 +78,50 @@ function iconCell(name) {
     return `<span class="w-4 h-4 inline-block align-middle [&>svg]:w-4 [&>svg]:h-4">${iconHTML(name)}</span>`;
 }
 
+const PAGE_SIZE = 10;
+
+// GIF blobs are immutable once created (sharing/unsharing only changes
+// metadata, never the bytes), so once fetched they're cached in memory
+// for this page session - switching pages back and forth, or any action
+// that reloads the current page, never re-downloads/re-decodes an image
+// it already has. Cleared entries on delete so nothing keeps references
+// to GIFs that no longer exist.
+const imageCache = new Map();
+function cachedImageFetch(cacheKey, path) {
+    if (imageCache.has(cacheKey)) return Promise.resolve(imageCache.get(cacheKey));
+    return api(path)
+        .then((res) => res.blob())
+        .then((blob) => { imageCache.set(cacheKey, blob); return blob; });
+}
+
+function renderPager({ prevId, nextId, labelId }, state, onChange) {
+    const totalPages = Math.max(1, Math.ceil(state.total / PAGE_SIZE));
+    document.getElementById(labelId).textContent = `Trang ${state.page}/${totalPages}`;
+    const prevBtn = document.getElementById(prevId);
+    const nextBtn = document.getElementById(nextId);
+    prevBtn.disabled = state.page <= 1;
+    nextBtn.disabled = state.page >= totalPages;
+    prevBtn.onclick = () => onChange(state.page - 1);
+    nextBtn.onclick = () => onChange(state.page + 1);
+}
+
 // ---------- GIF library (up to the user's quota, each slot shareable
 // independently; exactly one slot is "active" = synced to devices) ----------
 
-async function loadGifLibrary() {
+let gifPage = 1;
+
+async function loadGifLibrary(page = gifPage) {
     try {
-        const res = await api('/me/gifs');
-        const gifs = await res.json();
-        renderGifLibrary(gifs);
+        const res = await api(`/me/gifs?page=${page}&pageSize=${PAGE_SIZE}`);
+        const { items, total } = await res.json();
+        gifPage = page;
+        renderGifLibrary(items, total);
     } catch (err) {
         showError(accountError, err);
     }
 }
 
-function renderGifLibrary(gifs) {
+function renderGifLibrary(gifs, total) {
     const grid = document.getElementById('gif-grid');
     const empty = document.getElementById('gif-empty');
     grid.innerHTML = '';
@@ -105,11 +135,17 @@ function renderGifLibrary(gifs) {
         }
     }
 
-    document.getElementById('gif-count').textContent = gifs.length;
+    document.getElementById('gif-count').textContent = total;
     // quota is only known precisely via /admin/users for other users;
     // for the logged-in user's own quota, infer "full" by trying upload
     // and reacting to 409, but show a live count either way.
-    checkQuota(gifs.length);
+    checkQuota(total);
+
+    renderPager(
+        { prevId: 'gif-prev', nextId: 'gif-next', labelId: 'gif-page-label' },
+        { page: gifPage, total },
+        (p) => loadGifLibrary(p),
+    );
 }
 
 let lastKnownQuota = null;
@@ -143,8 +179,7 @@ function renderGifCard(g) {
         ${g.isPublic ? `<p class="text-[10px] break-all text-base-content/60">${location.origin}/public/${g.slug}</p>` : ''}
     `;
 
-    api(`/me/gifs/${g.id}/image`)
-        .then((res) => res.blob())
+    cachedImageFetch('me:' + g.id, `/me/gifs/${g.id}/image`)
         .then((blob) => { card.querySelector('img').src = URL.createObjectURL(blob); })
         .catch(() => {});
 
@@ -194,6 +229,7 @@ async function deleteGif(id) {
     accountError.textContent = '';
     try {
         await api(`/me/gifs/${id}`, { method: 'DELETE' });
+        imageCache.delete('me:' + id);
         loadGifLibrary();
         loadHistory();
     } catch (err) {
@@ -311,7 +347,8 @@ async function tryShowAdmin() {
     }
 }
 
-document.getElementById('admin-public-search').addEventListener('input', () => loadPublicAdmin());
+let adminPublicPage = 1;
+document.getElementById('admin-public-search').addEventListener('input', () => loadPublicAdmin(1));
 
 async function loadUsers() {
     const res = await api('/admin/users');
@@ -359,14 +396,17 @@ async function deleteUser(id) {
     }
 }
 
-async function loadPublicAdmin() {
+async function loadPublicAdmin(page = adminPublicPage) {
     const q = document.getElementById('admin-public-search')?.value.trim() || '';
-    const params = q ? '?q=' + encodeURIComponent(q) : '';
-    const res = await api('/public' + params);
-    const entries = await res.json();
+    const params = new URLSearchParams({ page, pageSize: PAGE_SIZE });
+    if (q) params.set('q', q);
+    const res = await api('/public?' + params.toString());
+    const { items, total } = await res.json();
+    adminPublicPage = page;
+
     const grid = document.getElementById('public-grid');
     grid.innerHTML = '';
-    for (const entry of entries) {
+    for (const entry of items) {
         const item = document.createElement('div');
         item.className = 'card bg-base-200 p-3 items-center gap-2 text-center';
         item.innerHTML = `
@@ -380,16 +420,22 @@ async function loadPublicAdmin() {
         `;
         item.querySelector('button').addEventListener('click', () => unpublish(entry.slug));
         grid.appendChild(item);
-        api('/public/' + entry.slug)
-            .then((res) => res.blob())
+        cachedImageFetch('public:' + entry.slug, '/public/' + entry.slug)
             .then((blob) => { item.querySelector('img').src = URL.createObjectURL(blob); })
             .catch(() => {});
     }
+
+    renderPager(
+        { prevId: 'admin-public-prev', nextId: 'admin-public-next', labelId: 'admin-public-page-label' },
+        { page: adminPublicPage, total },
+        (p) => loadPublicAdmin(p),
+    );
 }
 
 async function unpublish(slug) {
     try {
         await api('/admin/public/' + slug, { method: 'DELETE' });
+        imageCache.delete('public:' + slug);
         await loadPublicAdmin();
     } catch (err) {
         showError(adminError, err);

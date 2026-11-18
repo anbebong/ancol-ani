@@ -7,41 +7,52 @@ const galleryBox = document.getElementById('gallery-box');
 const searchQ = document.getElementById('search-q');
 const searchUser = document.getElementById('search-user');
 
+const PAGE_SIZE = 10;
+
+// GIF blobs never change once created, so cache them for this page
+// session instead of re-fetching/re-decoding on every page change or
+// search re-run that happens to include an already-seen slug.
+const imageCache = new Map();
+function cachedImageFetch(slug) {
+    if (imageCache.has(slug)) return Promise.resolve(imageCache.get(slug));
+    return api('/public/' + slug)
+        .then((res) => res.blob())
+        .then((blob) => { imageCache.set(slug, blob); return blob; });
+}
+
 renderIcons();
 
-async function load() {
+let page = 1;
+
+async function load(p = page) {
     if (!getToken()) {
         needLogin.classList.remove('hidden');
         galleryBox.classList.add('hidden');
         return;
     }
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: p, pageSize: PAGE_SIZE });
     if (searchQ.value.trim()) params.set('q', searchQ.value.trim());
     if (searchUser.value.trim()) params.set('user', searchUser.value.trim());
-    const qs = params.toString() ? '?' + params.toString() : '';
 
-    let entries;
+    let items, total;
     try {
-        const res = await api('/public' + qs);
-        entries = await res.json();
+        const res = await api('/public?' + params.toString());
+        ({ items, total } = await res.json());
     } catch (_) {
         needLogin.classList.remove('hidden');
         galleryBox.classList.add('hidden');
         return;
     }
+    page = p;
 
     const grid = document.getElementById('grid');
     const emptyNote = document.getElementById('empty-note');
     grid.innerHTML = '';
 
-    if (!entries.length) {
-        emptyNote.classList.remove('hidden');
-        return;
-    }
-    emptyNote.classList.add('hidden');
+    emptyNote.classList.toggle('hidden', items.length > 0);
 
-    for (const entry of entries) {
+    for (const entry of items) {
         const item = document.createElement('div');
         item.className = 'card bg-base-200 p-3 items-center gap-2 text-center';
         item.innerHTML = `
@@ -54,14 +65,20 @@ async function load() {
             </div>
         `;
         grid.appendChild(item);
-        api('/public/' + entry.slug)
-            .then((res) => res.blob())
+        cachedImageFetch(entry.slug)
             .then((blob) => { item.querySelector('img').src = URL.createObjectURL(blob); })
             .catch(() => {});
     }
+
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    document.getElementById('gallery-page-label').textContent = `Trang ${page}/${totalPages}`;
+    document.getElementById('gallery-prev').disabled = page <= 1;
+    document.getElementById('gallery-next').disabled = page >= totalPages;
 }
 
-searchQ.addEventListener('input', load);
-searchUser.addEventListener('input', load);
+document.getElementById('gallery-prev').addEventListener('click', () => load(page - 1));
+document.getElementById('gallery-next').addEventListener('click', () => load(page + 1));
+searchQ.addEventListener('input', () => load(1));
+searchUser.addEventListener('input', () => load(1));
 
 load();
