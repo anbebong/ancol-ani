@@ -9,11 +9,17 @@ Có 3 phần tách biệt:
 | Phần | Vị trí | Vai trò |
 |---|---|---|
 | **App desktop** (`ancol-ani.exe`) | repo root (`app.go`, `main.go`) | Widget hiển thị GIF/chữ trên màn hình. Build bằng **Wails**, không phải `go build` thường. |
-| **Web local** (trang settings `localhost:8788`) | `web/` (Vite project riêng) | Trang cấu hình của app — đổi GIF/chữ local, và khối "Đồng bộ tài khoản" để liên kết với syncserver. Nhúng vào `ancol-ani.exe` qua `go:embed web/dist`. |
+| **Web local** (trang settings `localhost:8788`) | `web/` (Vite + **Vue 3 + Vue Router**, cùng thiết kế với portal) | Trang cấu hình của app, nhiều trang: `#/` Widget (chữ + GIF local), `#/library` (thư viện GIF trên server, "Dùng cho widget"), `#/gallery` (GIF public), `#/account` (liên kết/hủy liên kết với syncserver). 2 trang library/gallery chỉ vào được khi đã liên kết. Song ngữ VI/EN (`src/i18n.js`, reactive). Trạng thái liên kết ở `src/account.js`. GIF luôn vẽ bằng canvas (`src/gif-player.js` qua `GifCanvas.vue`), không dùng `<img>` vì animation GIF gốc của Chromium có thể bị đứng. Nhúng vào `ancol-ani.exe` qua `go:embed web/dist`. |
+| **Thiết kế dùng chung** | `ui/` (không phải project Vite, không có `package.json`) | Mọi thứ về giao diện mà portal và trang settings dùng chung: theme daisyUI "pixel" + Tailwind (`tailwind.shared.cjs`), CSS (`pixel.css`), component (`components/`: Icon, AppLogo, PageHeader, Pager), hộp thoại xác nhận (`modal.js`), bộ icon lucide (`icons.js`), logo (`assets/logo.png`). Hai project import qua alias **`@ui/...`**, cấu hình bởi `ui/vite.shared.js`. **Sửa giao diện chung thì sửa ở `ui/` rồi build lại cả hai project.** |
 | **Syncserver** (`syncserver.exe`) | `cmd/syncserver/` | Server độc lập: tài khoản, thư viện GIF, chia sẻ công khai. Có DB riêng (SQLite file `data/ancol-ani.db`). |
 | **Portal** (web UI của syncserver) | `cmd/syncserver/portal/` (Vite + **Vue 3 + Vue Router**) | SPA nhiều trang: `#/login`, `#/library`, `#/history`, `#/gallery`, `#/admin/users`, `#/admin/public` (2 trang admin có guard theo `/me.isAdmin`). Dùng hash router nên server Go không cần SPA fallback. Mỗi trang là 1 file trong `src/views/`, component dùng chung trong `src/components/`, trạng thái đăng nhập ở `src/session.js`. Nhúng vào `syncserver.exe` qua `go:embed portal/dist`. |
 
-**3 project Vite độc lập, không dùng chung code:** `frontend/` (UI chính của widget), `web/` (settings local), `cmd/syncserver/portal/` (portal server).
+**Icon / logo / mascot:** từng file dùng ở đâu, đã tạo thế nào và cách đổi → xem [ICONS.md](ICONS.md). Sinh lại toàn bộ icon từ 1 ảnh gốc bằng `scripts/gen-icons.ps1`.
+
+**3 project Vite, mỗi cái build và nhúng riêng:** `frontend/` (UI chính của widget), `web/` (settings local), `cmd/syncserver/portal/` (portal server). `web/` và `portal/` **dùng chung code giao diện trong `ui/`**:
+- `ui/` không có `node_modules` riêng. `ui/vite.shared.js` trỏ các import `vue` và `lucide-static` trong file của `ui/` về `node_modules` của project đang build, nên không cần cài gì cho `ui/`. Vì vậy **cả hai project phải có cùng các dependency đó** (`vue`, `lucide-static`, `tailwindcss` 3, `daisyui` 4).
+- Thêm icon mới: thêm vào `ui/icons.js` (import từ `lucide-static/icons/<tên>.svg?raw`), cả hai bên dùng được ngay.
+- Dev có hot reload: portal `npm run dev` proxy API sang syncserver `:9090`; web `npm run dev` proxy `/gif /text /version` sang app đang chạy ở `:8788`.
 
 ## 2. Build — LUÔN kill process đang chạy trước khi build lại
 
@@ -46,6 +52,15 @@ taskkill //F //PID <pid của ancol-ani.exe>   # lấy PID qua: tasklist | grep 
 "/e/go-cache/gopath/bin/wails.exe" build
 ```
 Nếu không chắc `wails.exe` ở đâu, tìm qua: `GOPATH` (PowerShell `go env GOPATH`) rồi `<gopath>\bin\wails.exe`.
+
+**Lỗi `'vite' is not recognized` khi `wails build`:** máy này đặt `NODE_ENV=production` (npm config `omit = ["dev"]`), nên `npm install` mà Wails tự chạy bỏ qua devDependencies, trong đó có `vite`. Đặt lại `NODE_ENV` cho riêng một lệnh vẫn không đủ. Cách chắc ăn: tự build frontend trước rồi bảo Wails bỏ qua bước đó:
+```bash
+cd frontend && npm ci --include=dev && npm run build && cd ..
+wails build -s        # -s = skip frontend build
+```
+(Các project Vite khác (`web/`, `cmd/syncserver/portal/`) cũng vậy: cài bằng `npm ci --include=dev`.)
+
+`wails build` còn tự sửa `go.mod`, `frontend/wailsjs/runtime/*` (chỉ đổi kiểu xuống dòng LF/CRLF) và `frontend/package.json.md5` (hash cache). Không có thay đổi thật → `git checkout -- go.mod frontend/wailsjs frontend/package.json.md5`.
 
 **Không bao giờ** tự ý tắt/mở app GUI (`ancol-ani.exe`) hộ user trừ khi họ đồng ý rõ ràng — build xong để họ tự mở; khởi động GUI app từ shell/agent không đáng tin (có thể không hiện cửa sổ, không có session desktop thật).
 
