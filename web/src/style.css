@@ -8,6 +8,9 @@
   --accent-1: #7c6bff;
   --accent-2: #ff6bd6;
   --border: #35335a;
+  --success: #2fbf71;
+  --warning: #e8a53d;
+  --danger: #ef4458;
 }
 
 body {
@@ -39,11 +42,40 @@ body {
 .pixel-btn-ghost {
   border: 2px solid var(--border);
   box-shadow: 3px 3px 0 #000;
-  background: var(--panel);
+  background: var(--bg);
   color: var(--muted);
 }
-.pixel-btn-ghost:hover { color: var(--ink); }
+.pixel-btn-ghost:hover { color: var(--ink); border-color: var(--accent-1); }
 .pixel-btn-ghost:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+
+/* Action-specific solid colors so icon-only buttons (share/unshare/delete)
+   never blend into the panel background like pixel-btn-ghost does. */
+.pixel-btn-success {
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 #000;
+  background: var(--success);
+  color: #fff;
+}
+.pixel-btn-success:hover { filter: brightness(1.08); }
+.pixel-btn-success:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+
+.pixel-btn-warning {
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 #000;
+  background: var(--warning);
+  color: #1a1400;
+}
+.pixel-btn-warning:hover { filter: brightness(1.08); }
+.pixel-btn-warning:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
+
+.pixel-btn-danger {
+  border: 2px solid var(--border);
+  box-shadow: 3px 3px 0 #000;
+  background: var(--danger);
+  color: #fff;
+}
+.pixel-btn-danger:hover { filter: brightness(1.08); }
+.pixel-btn-danger:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #000; }
 
 .pixel-input {
   border: 2px solid var(--border);

@@ -2,6 +2,7 @@ import './style.css';
 import { t, getLang, setLang, applyTranslations } from './i18n.js';
 import { initSync } from './sync.js';
 import { playGif } from './gif-player.js';
+import { confirmDialog } from './modal.js';
 
 applyTranslations();
 document.getElementById('lang-toggle').addEventListener('click', () => {
@@ -69,6 +70,9 @@ fileInput.addEventListener('change', () => setChosenFile(fileInput.files[0]));
 document.getElementById('gif-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
+    const ok = await confirmDialog(t('confirmApply'), { confirmText: t('uploadSubmit'), cancelText: t('modalCancel') });
+    if (!ok) return;
+
     const res = await fetch('/gif', { method: 'POST', body: new FormData(form) });
     if (!res.ok) {
         toast(await res.text());
@@ -80,8 +84,10 @@ document.getElementById('gif-form').addEventListener('submit', async (e) => {
     toast(t('toastGifChanged'));
 });
 
-document.getElementById('reset-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+document.getElementById('reset-btn').addEventListener('click', async () => {
+    const ok = await confirmDialog(t('confirmReset'), { confirmText: t('resetSubmit'), cancelText: t('modalCancel') });
+    if (!ok) return;
+
     await fetch('/gif/reset', { method: 'POST' });
     reloadPreview();
     toast(t('toastGifReset'));

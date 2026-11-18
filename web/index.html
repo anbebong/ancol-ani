@@ -47,30 +47,42 @@
       <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]" data-i18n="gifLabel"></h2>
     </div>
 
-    <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
-      <div class="w-24 h-24 sm:w-[72px] sm:h-[72px] flex-shrink-0 border-2 border-[var(--border)] bg-[var(--bg)] flex items-center justify-center overflow-hidden">
-        <canvas id="preview" class="w-20 h-20 sm:w-14 sm:h-14 object-contain"></canvas>
+    <div class="flex items-stretch gap-4 text-center sm:text-left">
+      <!-- Cột ảnh: preview + nút tải lên server ngay dưới -->
+      <div class="w-20 sm:w-24 flex-shrink-0 flex flex-col gap-2.5">
+        <div class="flex-1 border-2 border-[var(--border)] bg-[var(--bg)] flex items-center justify-center overflow-hidden">
+          <canvas id="preview" class="w-full h-full object-contain"></canvas>
+        </div>
+        <!-- Chỉ hiện khi đã liên kết tài khoản (xem khối Đồng bộ) -->
+        <button id="push-current-gif-btn" type="button"
+                class="hidden pixel-btn rounded-lg w-full px-2 py-2 text-xs font-semibold items-center justify-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" class="w-3.5 h-3.5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span data-i18n="pushCurrentGifBtn"></span>
+        </button>
       </div>
 
-      <div class="w-full flex-1 min-w-0 flex flex-col gap-2.5">
-        <form id="gif-form" enctype="multipart/form-data">
-          <label id="dropzone" class="pixel-dropzone flex items-center gap-2.5 p-4 cursor-pointer">
-            <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4 text-[var(--accent-1)] flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <div class="flex-1 min-w-0 text-left">
-              <div id="dropzone-name" class="text-sm sm:text-xs truncate" data-i18n="dropzoneDefault"></div>
-              <div class="text-xs sm:text-[10px] mt-1 text-[var(--muted)]" data-i18n="dropzoneMax"></div>
-            </div>
-            <input type="file" name="gif" accept=".gif,image/gif" required class="hidden"/>
-          </label>
+      <!-- Cột chọn file: dropzone + Áp dụng/Đặt lại ngay dưới -->
+      <div class="flex-1 min-w-0 flex flex-col gap-2.5">
+        <label id="dropzone" class="pixel-dropzone flex-1 flex items-center gap-2.5 p-4 cursor-pointer">
+          <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4 text-[var(--accent-1)] flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="flex-1 min-w-0 text-left">
+            <div id="dropzone-name" class="text-sm sm:text-xs truncate" data-i18n="dropzoneDefault"></div>
+            <div class="text-xs sm:text-[10px] mt-1 text-[var(--muted)]" data-i18n="dropzoneMax"></div>
+          </div>
+          <input type="file" name="gif" form="gif-form" accept=".gif,image/gif" required class="hidden"/>
+        </label>
+
+        <form id="gif-form" enctype="multipart/form-data" class="flex gap-2.5">
           <button type="submit" data-i18n="uploadSubmit"
-                  class="pixel-btn rounded-lg w-full mt-2.5 px-4 py-3 text-base sm:text-sm font-semibold"></button>
-        </form>
-        <form id="reset-form">
-          <button type="submit" data-i18n="resetSubmit"
-                  class="pixel-btn-ghost rounded-lg w-full px-4 py-3 text-base sm:text-sm font-semibold"></button>
+                  class="pixel-btn rounded-lg flex-1 px-4 py-3 text-base sm:text-sm font-semibold"></button>
+          <button type="button" id="reset-btn" data-i18n="resetSubmit"
+                  class="pixel-btn-ghost rounded-lg flex-1 px-4 py-3 text-base sm:text-sm font-semibold"></button>
         </form>
       </div>
     </div>
@@ -98,7 +110,10 @@
         <span data-i18n="syncLinkedAs"></span> <span id="sync-username" class="font-semibold text-[var(--ink)]"></span>
       </p>
       <div>
-        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2" data-i18n="syncPersonalLabel"></p>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]" data-i18n="syncPersonalLabel"></p>
+          <span id="sync-quota" class="text-xs text-[var(--muted)]"></span>
+        </div>
         <div id="sync-library-personal" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2.5"></div>
         <p id="sync-library-personal-empty" class="hidden text-sm sm:text-xs text-[var(--muted)]" data-i18n="syncLibraryEmpty"></p>
       </div>
