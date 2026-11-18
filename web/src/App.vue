@@ -1,9 +1,10 @@
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, watch, onMounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import AppLogo from '@ui/components/AppLogo.vue';
 import { t, lang, toggleLang } from './i18n.js';
 import { account, loadMe } from './account.js';
+import { appInfo, hasUnseenUpdate, loadVersion } from './appInfo.js';
 import { toastState } from './toast.js';
 
 // Same shell as the server portal: sticky header with logo + nav, page
@@ -16,15 +17,13 @@ const links = computed(() => {
             { to: '/gallery', label: t('navGallery'), icon: 'compass' },
         );
     }
+    base.push({ to: '/changelog', label: t('navChangelog'), icon: 'sparkles', dot: true });
     return base;
 });
 
 watch(() => account.token, (tok) => { if (tok && !account.me) loadMe().catch(() => {}); }, { immediate: true });
 
-const version = ref('');
-onMounted(() => {
-    fetch('/version').then((r) => (r.ok ? r.text() : '')).then((v) => { version.value = v.trim(); }).catch(() => {});
-});
+onMounted(loadVersion);
 </script>
 
 <template>
@@ -33,12 +32,13 @@ onMounted(() => {
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/" class="flex items-center gap-2 shrink-0">
           <AppLogo :size="36"/>
-          <span class="font-extrabold text-lg hidden sm:inline whitespace-nowrap"><span class="gradient-text">ANCOL-ANI</span></span>
+          <span class="font-extrabold text-lg hidden sm:inline whitespace-nowrap"><span class="gradient-text">Ancol-ani</span></span>
         </RouterLink>
 
         <nav class="hidden md:flex items-center gap-1 flex-1">
           <RouterLink v-for="l in links" :key="l.to" :to="l.to" class="nav-link" active-class="" exact-active-class="is-active">
             <Icon :name="l.icon"/> {{ l.label }}
+            <span v-if="l.dot && hasUnseenUpdate" class="nav-dot" :title="t('changelogNewDot')"></span>
           </RouterLink>
         </nav>
         <div class="flex-1 md:hidden"></div>
@@ -60,6 +60,7 @@ onMounted(() => {
       <nav class="md:hidden flex gap-1 overflow-x-auto px-4 pb-2">
         <RouterLink v-for="l in links" :key="l.to" :to="l.to" class="nav-link shrink-0" active-class="" exact-active-class="is-active">
           <Icon :name="l.icon"/> {{ l.label }}
+          <span v-if="l.dot && hasUnseenUpdate" class="nav-dot"></span>
         </RouterLink>
       </nav>
     </header>
@@ -70,7 +71,10 @@ onMounted(() => {
 
     <footer class="flex items-center justify-center gap-1.5 text-xs text-base-content/50 pb-6">
       <span>anbebong</span>
-      <span v-if="version">· v{{ version }}</span>
+      <RouterLink v-if="appInfo.version" to="/changelog" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('navChangelog')">
+        · v{{ appInfo.version }}
+        <span v-if="hasUnseenUpdate" class="nav-dot"></span>
+      </RouterLink>
     </footer>
 
     <div class="app-toast" :class="{ 'is-visible': toastState.visible, 'is-success': toastState.kind === 'success', 'is-error': toastState.kind === 'error' }" role="status">

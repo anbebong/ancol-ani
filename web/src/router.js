@@ -11,6 +11,7 @@ const routes = [
     { path: '/library', name: 'library', component: () => import('./views/LibraryView.vue'), meta: { needsLink: true, title: 'navLibrary' } },
     { path: '/gallery', name: 'gallery', component: () => import('./views/GalleryView.vue'), meta: { needsLink: true, title: 'navGallery' } },
     { path: '/account', name: 'account', component: () => import('./views/AccountView.vue'), meta: { title: 'accountTitle' } },
+    { path: '/changelog', name: 'changelog', component: () => import('./views/ChangelogView.vue'), meta: { title: 'changelogTitle' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
@@ -34,7 +35,7 @@ export function createAppRouter() {
     });
 
     router.afterEach((to) => {
-        document.title = to.meta.title ? `${t(to.meta.title)} · ANCOL-ANI` : 'ANCOL-ANI';
+        document.title = to.meta.title ? `${t(to.meta.title)} · Ancol-ani` : 'Ancol-ani';
     });
 
     return router;

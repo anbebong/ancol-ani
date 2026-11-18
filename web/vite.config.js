@@ -6,7 +6,7 @@ const shared = sharedUi(__dirname);
 // `npm run dev`: proxy the desktop app's local endpoints to a running
 // ancol-ani.exe (it serves this page on :8788) so the page can be
 // developed with hot reload against the real widget.
-const LOCAL_ENDPOINTS = ['/gif', '/text', '/version'];
+const LOCAL_ENDPOINTS = ['/gif', '/text', '/version', '/changelog'];
 
 export default {
     base: './',

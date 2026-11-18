@@ -29,6 +29,8 @@ import monitor from 'lucide-static/icons/monitor.svg?raw';
 import languages from 'lucide-static/icons/languages.svg?raw';
 import externalLink from 'lucide-static/icons/external-link.svg?raw';
 import server from 'lucide-static/icons/server.svg?raw';
+import sparkles from 'lucide-static/icons/sparkles.svg?raw';
+import tag from 'lucide-static/icons/tag.svg?raw';
 
 // Raw lucide SVG markup by name, rendered through <Icon name="..."/>.
 // Shared by the server portal and the client's local settings page.
@@ -40,5 +42,5 @@ export const ICONS = {
     'share-2': share2, eye, 'eye-off': eyeOff, crown, users, user, 'user-plus': userPlus,
     check, minus, key, lock, 'trash-2': trash2, history, compass, shield, search,
     type, link, unlink, 'rotate-ccw': rotateCcw, monitor, languages,
-    'external-link': externalLink, server,
+    'external-link': externalLink, server, sparkles, tag,
 };

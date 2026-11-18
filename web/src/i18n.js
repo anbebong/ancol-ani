@@ -13,7 +13,7 @@ export const translations = {
         // Widget page
         widgetTitle: 'Widget',
         textLabel: 'Chữ hiển thị',
-        textHint: 'Chữ hiện ngay phía trên hoạt ảnh trên màn hình.',
+        textHint: 'Hiện trong bong bóng ngay phía trên hoạt ảnh. Nên ngắn gọn: tối đa khoảng 2 dòng, dài hơn sẽ bị cắt.',
         textPlaceholder: 'Gõ gì vào đây...',
         textSubmit: 'Hiển thị',
         gifLabel: 'Ảnh GIF',
@@ -86,6 +86,14 @@ export const translations = {
         toastExpired: 'Phiên đăng nhập hết hạn hoặc đã bị thu hồi, vui lòng liên kết lại',
         needLink: 'Cần liên kết tài khoản trước',
 
+        // What's new
+        navChangelog: 'Có gì mới',
+        changelogTitle: 'Có gì mới',
+        changelogSubtitle: 'Phiên bản đang chạy: v{version}',
+        changelogCurrent: 'đang dùng',
+        changelogError: 'Không tải được changelog.',
+        changelogNewDot: 'Có phiên bản mới, xem thay đổi',
+
         modalCancel: 'Hủy',
         pagerPrev: '‹ Trước',
         pagerNext: 'Sau ›',
@@ -102,7 +110,7 @@ export const translations = {
 
         widgetTitle: 'Widget',
         textLabel: 'Display text',
-        textHint: 'Shown right above the animation on screen.',
+        textHint: 'Shown in a bubble right above the animation. Keep it short: about 2 lines max, longer text gets cut off.',
         textPlaceholder: 'Type something...',
         textSubmit: 'Show',
         gifLabel: 'GIF image',
@@ -171,6 +179,13 @@ export const translations = {
         toastUnlinked: 'Unlinked',
         toastExpired: 'Session expired or revoked, please link again',
         needLink: 'Link an account first',
+
+        navChangelog: "What's new",
+        changelogTitle: "What's new",
+        changelogSubtitle: 'Running version: v{version}',
+        changelogCurrent: 'current',
+        changelogError: 'Could not load the changelog.',
+        changelogNewDot: 'New version available, see what changed',
 
         modalCancel: 'Cancel',
         pagerPrev: '‹ Prev',

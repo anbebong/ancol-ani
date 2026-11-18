@@ -25,6 +25,12 @@ var rawVersion string
 
 var appVersion = strings.TrimSpace(rawVersion)
 
+// Shown on the settings page's "What's new" page (GET /changelog), so the
+// changelog a user reads always matches the build they are running.
+//
+//go:embed CHANGELOG.md
+var changelog []byte
+
 // A large GIF (many MB) can freeze the small 70x70 WebView2 panel while it
 // decodes/animates, so uploads are capped to keep the widget responsive.
 const maxGifBytes = 3 << 20 // 3MB
@@ -122,6 +128,11 @@ func startLocalServer(ctx context.Context) {
 	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write([]byte(appVersion))
+	})
+
+	mux.HandleFunc("/changelog", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Write(changelog)
 	})
 
 	mux.HandleFunc("/text", func(w http.ResponseWriter, r *http.Request) {

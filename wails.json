@@ -9,5 +9,8 @@
   "author": {
     "name": "an.pt",
     "email": "an.pt@lancsnet.com"
+  },
+  "info": {
+    "productVersion": "1.1.0"
   }
 }

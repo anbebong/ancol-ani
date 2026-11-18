@@ -18,20 +18,51 @@
             flex-direction: column;
             align-items: center;
         }
+        /* Text sits in a small speech bubble in the brand colors (dark
+           panel, white text, purple border) so it stays readable on any
+           desktop wallpaper - the old red text with a yellow outline was
+           hard to read on both light and dark backgrounds. The panel is
+           only 30px tall: up to 2 lines of 10px text + the tail, longer
+           text is cut with an ellipsis. */
         #text-panel {
             width: 70px;
             height: 30px;
             flex: 0 0 30px;
             display: flex;
-            align-items: center;
+            align-items: flex-end;
             justify-content: center;
+        }
+        #text-bubble {
+            position: relative;
+            box-sizing: border-box;
+            max-width: 68px;
+            margin-bottom: 3px;
+            padding: 1px 4px;
+            background: rgba(20, 20, 43, 0.92);
+            color: #ffffff;
+            border: 1.5px solid #8b73ff;
+            border-radius: 6px;
+            box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.45);
+        }
+        #text-bubble.is-empty { display: none; }
+        #text-bubble::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -4.5px;
+            transform: translateX(-50%);
+            border: 3.5px solid transparent;
+            border-bottom: 0;
+            border-top-color: #8b73ff;
+        }
+        #text-content {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            font: 700 10px/1.1 "Segoe UI", system-ui, sans-serif;
             text-align: center;
-            font: bold 11px sans-serif;
-            color: #e02424;
-            -webkit-text-stroke: 1px #fff066;
-            paint-order: stroke fill;
             word-break: break-word;
-            line-height: 1.1;
         }
         #stage {
             width: 70px;
@@ -45,13 +76,16 @@
     </style>
 </head>
 <body>
-<div id="text-panel">Hi!</div>
+<div id="text-panel"><div id="text-bubble"><span id="text-content">Hi!</span></div></div>
 <canvas id="stage"></canvas>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
 
     window.runtime.EventsOn('server-text', (text) => {
-        document.getElementById('text-panel').textContent = text;
+        const value = (text || '').trim();
+        document.getElementById('text-content').textContent = value;
+        // No bubble at all for empty text instead of an empty box.
+        document.getElementById('text-bubble').classList.toggle('is-empty', !value);
     });
 
     const canvas = document.getElementById('stage');

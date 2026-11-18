@@ -3,6 +3,15 @@
    project's own @tailwind directives): dotted grid background, flat
    panels with a hard offset shadow instead of blur, square-ish corners.
    Colors are the "pixel" daisyUI theme in ui/tailwind.shared.cjs. */
+
+/* Always reserve the vertical scrollbar's width. Without it, pages taller
+   than the window get a scrollbar and the centered layout shifts ~7px
+   left, so switching between a long page (Widget, What's new) and a short
+   one (Explore) made the content visibly jump sideways. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background-image:
     linear-gradient(var(--fallback-b1, oklch(var(--b1))) 1px, transparent 1px),
@@ -319,3 +328,13 @@ body {
 .app-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
 .app-toast.is-success { border-color: #2fbf71; }
 .app-toast.is-error { border-color: #ef4458; }
+
+/* Small attention dot next to a nav item / version (e.g. unseen update). */
+.nav-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ff6bd6;
+  box-shadow: 0 0 0 2px #14142b;
+}
