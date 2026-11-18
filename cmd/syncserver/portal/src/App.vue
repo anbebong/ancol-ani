@@ -8,7 +8,7 @@ import AppLogo from '@ui/components/AppLogo.vue';
 const route = useRoute();
 const router = useRouter();
 
-const showShell = computed(() => route.name && route.name !== 'login');
+const showShell = computed(() => route.name && route.name !== 'login' && route.name !== 'sso');
 
 // Fetch the profile (username / admin flag / quota) whenever a session
 // starts, so the navbar can show it and the admin links appear.
@@ -41,7 +41,7 @@ async function logout() {
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/library" class="flex items-center gap-2 shrink-0">
           <AppLogo :size="36"/>
-          <span class="font-extrabold text-lg hidden sm:inline md:hidden lg:inline whitespace-nowrap"><span class="gradient-text">ANCOL-ANI</span></span>
+          <span class="font-extrabold text-lg hidden sm:inline md:hidden lg:inline whitespace-nowrap"><span class="gradient-text">Ancol-ani</span></span>
         </RouterLink>
 
         <nav class="hidden md:flex items-center gap-1 flex-1">

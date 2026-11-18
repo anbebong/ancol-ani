@@ -4,19 +4,27 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import { router } from './router.js';
 import { getToken, setUnauthorizedHandler } from './api.js';
-import { signOutLocal } from './session.js';
+import { signOutLocal, sendTokenToClient } from './session.js';
 
-// The desktop app's local settings page links an account by opening
-// {server}/?callback=<its url>. If this browser already has a portal
-// session, hand that token straight back instead of showing the portal
-// (the login page handles the not-yet-logged-in case).
-const callback = new URLSearchParams(location.search).get('callback');
-if (callback && getToken()) {
-    location.href = callback + (callback.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(getToken());
-} else {
+function mount() {
     setUnauthorizedHandler(() => {
         signOutLocal();
         if (router.currentRoute.value.name !== 'login') router.push({ name: 'login' });
     });
     createApp(App).use(router).mount('#app');
+}
+
+// The desktop app's local settings page links an account by opening
+// {server}/?callback=<its url>. If this browser already has a portal
+// session, give the app a fresh token of its own straight away instead of
+// asking to log in again. If that session turns out to be expired, fall
+// back to the login page (which handles the callback after login).
+const callback = new URLSearchParams(location.search).get('callback');
+if (callback && getToken()) {
+    sendTokenToClient(callback).catch(() => {
+        signOutLocal();
+        mount();
+    });
+} else {
+    mount();
 }

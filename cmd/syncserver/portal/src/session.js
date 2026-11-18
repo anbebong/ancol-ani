@@ -36,6 +36,27 @@ export function signOutLocal() {
     mePromise = null;
 }
 
+// Trades a valid token for a brand-new, independent session token for the
+// same account (POST /auth/token). Deliberately not via api(): a 401 here
+// is about `bearer`, which may not be this portal's own session.
+export async function issueToken(bearer) {
+    const res = await fetch('/auth/token', { method: 'POST', headers: { Authorization: 'Bearer ' + bearer } });
+    if (!res.ok) {
+        const err = new Error((await res.text()) || `HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+    }
+    return (await res.json()).token;
+}
+
+// Account linking from the desktop app (?callback=...): keep the portal's
+// own session and send the client its *own* token, so logging out on one
+// side never unlinks the other.
+export async function sendTokenToClient(callback) {
+    const token = await issueToken(session.token);
+    location.href = callback + (callback.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+}
+
 export async function signOut() {
     try { await api('/auth/logout', { method: 'POST' }); } catch (_) {}
     signOutLocal();

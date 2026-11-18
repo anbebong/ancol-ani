@@ -74,6 +74,21 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.respondWithToken(w, user.ID)
 }
 
+// handleIssueToken: POST /auth/token (authenticated). Issues a brand-new,
+// independent session token for the caller's own account. Used so the
+// portal and a linked desktop client never share one session:
+//   - linking: the portal keeps its own login and hands the client a
+//     fresh token from here (logging out of one doesn't unlink the other);
+//   - "open portal" from the client: the portal trades the client's token
+//     for its own session here instead of asking to log in again.
+func (s *server) handleIssueToken(w http.ResponseWriter, r *http.Request, userID int64) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.respondWithToken(w, userID)
+}
+
 func (s *server) respondWithToken(w http.ResponseWriter, userID int64) {
 	token, err := s.issueToken(userID)
 	if err != nil {

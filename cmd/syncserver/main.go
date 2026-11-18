@@ -80,6 +80,7 @@ func main() {
 	mux.HandleFunc("/auth/register", s.withCORS(s.handleRegister))
 	mux.HandleFunc("/auth/login", s.withCORS(s.handleLogin))
 	mux.HandleFunc("/auth/logout", s.withCORS(s.requireAuth(s.handleLogout)))
+	mux.HandleFunc("/auth/token", s.withCORS(s.requireAuth(s.handleIssueToken)))
 	mux.HandleFunc("/me", s.withCORS(s.requireAuth(s.handleMe)))
 	mux.HandleFunc("/me/password", s.withCORS(s.requireAuth(s.handleChangePassword)))
 

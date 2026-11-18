@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
@@ -12,6 +12,13 @@ const router = useRouter();
 const server = ref(account.server);
 
 onMounted(() => { if (account.token) loadMe().catch(() => {}); });
+
+// Opens the portal already signed in: the portal's #/sso page trades this
+// device's token for a separate portal session (POST /auth/token), so the
+// person doesn't have to log in again there. Passed in the URL fragment,
+// which browsers never send to the server.
+const portalUrl = computed(() =>
+    `${account.server}/#/sso?t=${encodeURIComponent(account.token || '')}&to=${encodeURIComponent('/account')}`);
 
 function link() {
     startLink(server.value);
@@ -61,7 +68,7 @@ async function doUnlink() {
         <p class="text-xs text-base-content/60">{{ t('changePasswordHint') }}</p>
 
         <div class="flex gap-2 flex-wrap">
-          <a :href="account.server + '/#/account'" target="_blank" rel="noopener" class="btn btn-primary btn-sm gap-1">
+          <a :href="portalUrl" target="_blank" rel="noopener" class="btn btn-primary btn-sm gap-1">
             <Icon name="external-link"/> {{ t('openPortal') }}
           </a>
           <button type="button" class="btn btn-error btn-sm gap-1" @click="doUnlink"><Icon name="unlink"/> {{ t('unlinkBtn') }}</button>

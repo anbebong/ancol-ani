@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { errMsg } from '../api.js';
-import { signIn } from '../session.js';
+import { signIn, sendTokenToClient } from '../session.js';
 import Icon from '@ui/components/Icon.vue';
 import AppLogo from '@ui/components/AppLogo.vue';
 
@@ -46,15 +46,15 @@ async function submit() {
         });
         if (!res.ok) throw new Error(await res.text());
         const { token } = await res.json();
+        signIn(token, u);
 
-        // Linking from the desktop app: hand the token back to it instead
-        // of keeping it in this portal.
+        // Linking from the desktop app: stay signed in here too, and hand
+        // the app a separate token of its own.
         if (callback) {
-            location.href = callback + (callback.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+            await sendTokenToClient(callback);
             return;
         }
 
-        signIn(token, u);
         const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/library';
         router.replace(redirect);
     } catch (err) {
@@ -69,7 +69,7 @@ async function submit() {
   <div class="auth-screen">
     <div class="w-full max-w-sm flex flex-col items-center">
       <div class="auth-mascot">
-        <img src="../assets/mascot.gif" alt="ancol-ani mascot"/>
+        <img src="../assets/mascot.gif" alt="Ancol-ani mascot"/>
       </div>
 
       <div class="card bg-base-100 w-full auth-card">
@@ -78,7 +78,7 @@ async function submit() {
           <div class="text-center flex flex-col gap-1">
             <h1 class="text-2xl font-extrabold tracking-tight flex items-center justify-center gap-2.5">
               <AppLogo :size="34"/>
-              <span class="gradient-text">ANCOL-ANI</span>
+              <span class="gradient-text">Ancol-ani</span>
             </h1>
             <p class="text-sm text-base-content/60">
               {{ isLogin
@@ -89,7 +89,7 @@ async function submit() {
 
           <div v-if="callback" class="alert alert-info text-xs py-2">
             <Icon name="key"/>
-            <span>Đăng nhập để liên kết tài khoản với app ancol-ani trên máy bạn.</span>
+            <span>Đăng nhập để liên kết tài khoản với app Ancol-ani trên máy bạn.</span>
           </div>
 
           <div role="tablist" class="auth-tabs">
