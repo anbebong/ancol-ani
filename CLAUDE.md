@@ -36,6 +36,10 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 - Server: `cd cmd/syncserver/portal && npm run build`, rồi `go run ./cmd/syncserver` (cần thư mục `data/`). Server nhúng `portal/dist` lúc build, sửa portal phải khởi động lại server.
 - **Không tự tắt/mở `ancol-ani.exe`** khi chưa hỏi người dùng (exe đang chạy thì build đè sẽ lỗi). Build xong để họ tự mở.
 
+## Production
+
+Sync server chạy công khai ở **https://game.anbebong.io.vn**, trên điện thoại Termux tự host (thay chỗ dino-race trên cổng 7879). Deploy bằng `bash deploy/phone/deploy.sh`, chi tiết ở DEV-NOTES mục 10. Domain gốc `anbebong.io.vn` là site khác, không phải server này. Deploy là thao tác công khai: hỏi người dùng trước khi chạy. Không đụng `~/ancolani/data/` và `~/ancolani/.jwt-secret` trên điện thoại.
+
 ## Version & changelog
 
 Phát hành app desktop: sửa cùng lúc `VERSION`, `wails.json` (`info.productVersion`) và thêm mục đầu `CHANGELOG.md` dạng `## x.y.z — YYYY-MM-DD` với `### Mới / Thay đổi / Sửa lỗi`. App nhúng cả hai file; trang **Có gì mới** trong settings parse `CHANGELOG.md`, nên giữ đúng định dạng (DEV-NOTES mục 9). Changelog chỉ ghi thay đổi người dùng app thấy được.
