@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api, errMsg, fmtDate } from '../api.js';
-import Icon from '../components/Icon.vue';
-import PageHeader from '../components/PageHeader.vue';
+import Icon from '@ui/components/Icon.vue';
+import PageHeader from '@ui/components/PageHeader.vue';
 
 const entries = ref([]);
 const loading = ref(true);

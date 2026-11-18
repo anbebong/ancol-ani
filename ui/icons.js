@@ -4,6 +4,7 @@ import globe from 'lucide-static/icons/globe.svg?raw';
 import logOut from 'lucide-static/icons/log-out.svg?raw';
 import logIn from 'lucide-static/icons/log-in.svg?raw';
 import upload from 'lucide-static/icons/upload.svg?raw';
+import download from 'lucide-static/icons/download.svg?raw';
 import share2 from 'lucide-static/icons/share-2.svg?raw';
 import eye from 'lucide-static/icons/eye.svg?raw';
 import eyeOff from 'lucide-static/icons/eye-off.svg?raw';
@@ -20,12 +21,24 @@ import history from 'lucide-static/icons/history.svg?raw';
 import compass from 'lucide-static/icons/compass.svg?raw';
 import shield from 'lucide-static/icons/shield.svg?raw';
 import search from 'lucide-static/icons/search.svg?raw';
+import type from 'lucide-static/icons/type.svg?raw';
+import link from 'lucide-static/icons/link.svg?raw';
+import unlink from 'lucide-static/icons/unlink.svg?raw';
+import rotateCcw from 'lucide-static/icons/rotate-ccw.svg?raw';
+import monitor from 'lucide-static/icons/monitor.svg?raw';
+import languages from 'lucide-static/icons/languages.svg?raw';
+import externalLink from 'lucide-static/icons/external-link.svg?raw';
+import server from 'lucide-static/icons/server.svg?raw';
 
 // Raw lucide SVG markup by name, rendered through <Icon name="..."/>.
-// Lucide icons use stroke="currentColor", so color comes from the
-// surrounding text color.
+// Shared by the server portal and the client's local settings page.
+// Lucide icons use stroke="currentColor", so color follows the text.
+// To add one: import it from lucide-static/icons/<name>.svg?raw below
+// and list it here (browse names at https://lucide.dev/icons).
 export const ICONS = {
-    image, images, globe, 'log-out': logOut, 'log-in': logIn, upload, 'share-2': share2,
-    eye, 'eye-off': eyeOff, crown, users, user, 'user-plus': userPlus, check, minus,
-    key, lock, 'trash-2': trash2, history, compass, shield, search,
+    image, images, globe, 'log-out': logOut, 'log-in': logIn, upload, download,
+    'share-2': share2, eye, 'eye-off': eyeOff, crown, users, user, 'user-plus': userPlus,
+    check, minus, key, lock, 'trash-2': trash2, history, compass, shield, search,
+    type, link, unlink, 'rotate-ccw': rotateCcw, monitor, languages,
+    'external-link': externalLink, server,
 };

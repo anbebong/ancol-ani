@@ -2,9 +2,9 @@
 import { ref, onMounted } from 'vue';
 import { api, errMsg } from '../api.js';
 import { session } from '../session.js';
-import { confirmDialog } from '../modal.js';
-import Icon from '../components/Icon.vue';
-import PageHeader from '../components/PageHeader.vue';
+import { confirmDialog } from '@ui/modal.js';
+import Icon from '@ui/components/Icon.vue';
+import PageHeader from '@ui/components/PageHeader.vue';
 
 const users = ref([]);
 const loading = ref(true);
@@ -27,6 +27,12 @@ onMounted(load);
 async function setQuota(u, value) {
     error.value = '';
     notice.value = '';
+    // A cleared field would otherwise be sent as Number('') === 0 and
+    // silently drop the user's quota to zero.
+    if (String(value).trim() === '' || !Number.isInteger(Number(value))) {
+        await load();
+        return;
+    }
     try {
         await api(`/admin/users/${u.id}/quota`, {
             method: 'PATCH',

@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { api, errMsg, fmtDate, tagList, PAGE_SIZE } from '../api.js';
-import Icon from '../components/Icon.vue';
-import Pager from '../components/Pager.vue';
+import Icon from '@ui/components/Icon.vue';
+import Pager from '@ui/components/Pager.vue';
 import GifImage from '../components/GifImage.vue';
-import PageHeader from '../components/PageHeader.vue';
+import PageHeader from '@ui/components/PageHeader.vue';
 
 const q = ref('');
 const user = ref('');
