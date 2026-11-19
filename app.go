@@ -6,8 +6,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"image/gif"
 	"io"
 	"io/fs"
@@ -69,6 +72,135 @@ func resolveListener() (net.Listener, string) {
 var rawVersion string
 
 var appVersion = strings.TrimSpace(rawVersion)
+
+// updateServerBase is the same public sync server already used for
+// account linking/GIF sharing (see CLAUDE.md) - /latest-version and
+// /download/ancol-ani.exe (cmd/syncserver/update.go) are two public,
+// read-only routes on it, publishing a release there is a manual step
+// (copy the exe + write latest.json), not something this app does.
+const updateServerBase = "https://game.anbebong.io.vn"
+
+// latestVersionInfo mirrors latest.json's shape on the server.
+type latestVersionInfo struct {
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+	Notes   string `json:"notes"`
+}
+
+// fetchLatestVersion calls the server's /latest-version. Network/parse
+// errors are returned as-is so the HTTP handler can surface something
+// useful ("server unreachable" vs "no release published yet" etc) rather
+// than a generic failure.
+func fetchLatestVersion() (*latestVersionInfo, error) {
+	resp, err := http.Get(updateServerBase + "/latest-version")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server trả về %d", resp.StatusCode)
+	}
+
+	var info latestVersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+// isNewerVersion compares two "x.y.z" strings component by component
+// (numeric, not lexicographic - "1.1.10" counts as newer than "1.1.9").
+// Any component that fails to parse as a number is treated as 0, so a
+// malformed string just loses the comparison instead of panicking.
+func isNewerVersion(candidate, current string) bool {
+	c := strings.Split(candidate, ".")
+	k := strings.Split(current, ".")
+	for i := 0; i < len(c) || i < len(k); i++ {
+		var cv, kv int
+		if i < len(c) {
+			cv, _ = strconv.Atoi(c[i])
+		}
+		if i < len(k) {
+			kv, _ = strconv.Atoi(k[i])
+		}
+		if cv != kv {
+			return cv > kv
+		}
+	}
+	return false
+}
+
+// applyUpdate downloads the new exe, verifies it against expectedSHA256,
+// and - only once verified - arranges for it to replace this exe and
+// relaunch. It never touches the real exe path directly: Windows won't
+// let another process overwrite a running exe's bytes in place, but it
+// does allow renaming the running exe out of the way, which is what the
+// generated batch script does after this process has fully exited (so
+// the file is no longer open for execution).
+func applyUpdate(expectedSHA256 string) error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Get(updateServerBase + "/download/ancol-ani.exe")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server trả về %d", resp.StatusCode)
+	}
+
+	newExePath := exePath + ".new"
+	out, err := os.Create(newExePath)
+	if err != nil {
+		return err
+	}
+	hasher := sha256.New()
+	_, copyErr := io.Copy(io.MultiWriter(out, hasher), resp.Body)
+	out.Close()
+	if copyErr != nil {
+		os.Remove(newExePath)
+		return copyErr
+	}
+
+	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
+	if !strings.EqualFold(actualSHA256, expectedSHA256) {
+		os.Remove(newExePath)
+		return fmt.Errorf("file tải về không khớp checksum, có thể bị lỗi khi tải")
+	}
+
+	return launchUpdateScript(exePath, newExePath)
+}
+
+// launchUpdateScript writes a small batch file that waits for this
+// process (by PID) to exit, swaps the verified .new file into place, and
+// relaunches it - then starts that script detached (via "cmd /c start",
+// which spawns an independent process rather than a child of this one,
+// so it survives this process quitting right after).
+func launchUpdateScript(exePath, newExePath string) error {
+	pid := os.Getpid()
+	script := fmt.Sprintf(`@echo off
+:wait
+tasklist /fi "PID eq %d" 2>NUL | find "%d" >NUL
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >NUL
+    goto wait
+)
+move /y "%s" "%s" >NUL
+start "" "%s"
+del "%%~f0"
+`, pid, pid, newExePath, exePath, exePath)
+
+	scriptPath := filepath.Join(os.TempDir(), "ancol-ani-update.bat")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("cmd", "/c", "start", "/min", "", scriptPath)
+	return cmd.Start()
+}
 
 // Shown on the settings page's "What's new" page (GET /changelog), so the
 // changelog a user reads always matches the build they are running.
@@ -468,6 +600,45 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 		} else {
 			w.Write([]byte("false"))
 		}
+	})
+
+	mux.HandleFunc("/check-update", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		info, err := fetchLatestVersion()
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"hasUpdate": isNewerVersion(info.Version, appVersion),
+			"version":   info.Version,
+			"sha256":    info.SHA256,
+			"notes":     info.Notes,
+		})
+	})
+
+	mux.HandleFunc("/apply-update", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		sha := strings.TrimSpace(r.FormValue("sha256"))
+		if sha == "" {
+			http.Error(w, "missing sha256", http.StatusBadRequest)
+			return
+		}
+
+		if err := applyUpdate(sha); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte("ok"))
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			runtime.Quit(ctx)
+		}()
 	})
 
 	http.Serve(ln, mux)

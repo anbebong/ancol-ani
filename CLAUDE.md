@@ -44,7 +44,13 @@ Sync server chạy công khai ở **https://game.anbebong.io.vn**, trên điện
 
 ## Version & changelog
 
-Phát hành app desktop: sửa cùng lúc `VERSION`, `wails.json` (`info.productVersion`) và thêm mục đầu `CHANGELOG.md` dạng `## x.y.z — YYYY-MM-DD` với `### Mới / Thay đổi / Sửa lỗi`. App nhúng cả hai file; trang **Có gì mới** trong settings parse `CHANGELOG.md`, nên giữ đúng định dạng (DEV-NOTES mục 9). Changelog chỉ ghi thay đổi người dùng app thấy được.
+Phát hành app desktop: sửa cùng lúc `VERSION`, `wails.json` (`info.productVersion`) và thêm mục đầu `CHANGELOG.md` dạng `## x.y.z — YYYY-MM-DD` với `### Mới / Thay đổi / Sửa lỗi`. App nhúng cả hai file; trang **Về Ancol-Ani** trong settings parse `CHANGELOG.md`, nên giữ đúng định dạng (DEV-NOTES mục 9). Changelog chỉ ghi thay đổi người dùng app thấy được.
+
+## Cập nhật app (tự cập nhật)
+
+Trang **Về Ancol-Ani** có nút "Kiểm tra cập nhật" — chỉ chạy khi người dùng tự bấm, không tự động/định kỳ. App gọi `/check-update` local (`app.go`), cái đó gọi `GET {updateServerBase}/latest-version` trên sync server công khai; có bản mới thì hỏi xác nhận rồi `POST /apply-update` tải exe mới, kiểm `sha256`, tự thay file + khởi động lại (qua file `.bat` tạm chờ process cũ thoát).
+
+**Publish 1 bản mới là thao tác tay** (không có upload API, không CI): sau khi build xong `ancol-ani.exe`, copy đè vào `data/releases/ancol-ani.exe` trên server (`cmd/syncserver/update.go` serve tĩnh từ đó), rồi ghi/`sửa data/releases/latest.json` dạng `{"version":"x.y.z","sha256":"<sha256 của file exe đó>","notes":"..."}`. Thiếu `latest.json` thì nút "Kiểm tra cập nhật" chỉ báo lỗi, không crash app.
 
 ## Icon
 

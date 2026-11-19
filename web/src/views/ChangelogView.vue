@@ -3,13 +3,55 @@ import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import { confirmDialog } from '@ui/modal.js';
 import { t } from '../i18n.js';
 import { appInfo, loadChangelog, markVersionSeen } from '../appInfo.js';
+import { toast, toastError } from '../toast.js';
 
 const route = useRoute();
 const releases = ref([]);
 const loading = ref(true);
 const failed = ref(false);
+const checkingUpdate = ref(false);
+
+// Manual only, per request - no background polling. Hits the widget's
+// own local /check-update (app.go), which in turn calls the public sync
+// server's /latest-version (cmd/syncserver/update.go) - this page never
+// talks to that server directly.
+async function checkForUpdate() {
+    checkingUpdate.value = true;
+    try {
+        const res = await fetch('/check-update');
+        const data = await res.json();
+        if (data.error) {
+            toast('Không kiểm tra được cập nhật: ' + data.error, 'error');
+            return;
+        }
+        if (!data.hasUpdate) {
+            toast('Đang dùng bản mới nhất.', 'success');
+            return;
+        }
+
+        const ok = await confirmDialog(
+            `Có bản mới v${data.version}. Cập nhật ngay? App sẽ tự khởi động lại.`,
+            { confirmText: 'Cập nhật', cancelText: 'Để sau' },
+        );
+        if (!ok) return;
+
+        const form = new FormData();
+        form.append('sha256', data.sha256);
+        const applyRes = await fetch('/apply-update', { method: 'POST', body: form });
+        if (!applyRes.ok) {
+            toast('Cập nhật lỗi: ' + (await applyRes.text()), 'error');
+            return;
+        }
+        toast('Đang cập nhật, app sẽ tự khởi động lại...', 'success');
+    } catch (err) {
+        toastError(err);
+    } finally {
+        checkingUpdate.value = false;
+    }
+}
 
 // Footer "Chính sách" / version links (App.vue) both route here with
 // ?section=policy|version, since hash-history routing already uses '#'
@@ -94,6 +136,12 @@ const policyContact = 'angokodau@gmail.com';
   <div class="flex flex-col gap-6">
     <PageHeader icon="sparkles" :title="t('changelogTitle')"
       :subtitle="appInfo.version ? t('changelogSubtitle', { version: appInfo.version }) : ''"/>
+
+    <button type="button" class="btn btn-primary self-start gap-2" :disabled="checkingUpdate" @click="checkForUpdate">
+      <span v-if="checkingUpdate" class="loading loading-spinner loading-sm"></span>
+      <Icon v-else name="download"/>
+      Kiểm tra cập nhật
+    </button>
 
     <div id="section-policy" class="card bg-base-100 max-w-3xl">
       <div class="card-body gap-4">

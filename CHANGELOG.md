@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.5 — 2026-11-19
+
+### Mới
+- Nút "Kiểm tra cập nhật" ở trang Về Ancol-Ani: có bản mới thì hỏi xác nhận, đồng ý mới tải và tự cài, tự khởi động lại app.
+
 ## 1.1.4 — 2026-11-19
 
 ### Mới
