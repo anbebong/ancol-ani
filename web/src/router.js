@@ -35,7 +35,7 @@ export function createAppRouter() {
     });
 
     router.afterEach((to) => {
-        document.title = to.meta.title ? `${t(to.meta.title)} · Ancol-ani` : 'Ancol-ani';
+        document.title = to.meta.title ? `${t(to.meta.title)} · Ancol-Ani` : 'Ancol-Ani';
     });
 
     return router;

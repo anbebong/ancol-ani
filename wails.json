@@ -7,10 +7,14 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
-    "name": "an.pt",
-    "email": "an.pt@lancsnet.com"
+    "name": "Phạm Thành An",
+    "email": "angokodau@gmail.com"
   },
   "info": {
-    "productVersion": "1.1.3"
+    "productVersion": "1.1.4",
+    "companyName": "Phạm Thành An",
+    "productName": "Ancol-Ani",
+    "copyright": "© Phạm Thành An (anbebong)",
+    "comments": "Widget GIF/chữ góc màn hình"
   }
 }

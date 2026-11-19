@@ -39,5 +39,5 @@ router.beforeEach(async (to) => {
 });
 
 router.afterEach((to) => {
-    document.title = to.meta.title ? `${to.meta.title} · Ancol-ani` : 'Ancol-ani';
+    document.title = to.meta.title ? `${to.meta.title} · Ancol-Ani` : 'Ancol-Ani';
 });

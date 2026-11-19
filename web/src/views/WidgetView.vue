@@ -8,6 +8,24 @@ import { t } from '../i18n.js';
 import { account, serverApi } from '../account.js';
 import { toast, toastError } from '../toast.js';
 
+// ---------- start with Windows ----------
+const autoStart = ref(false);
+onMounted(async () => {
+    try {
+        autoStart.value = (await (await fetch('/autostart')).text()).trim() === 'true';
+    } catch (_) {}
+});
+async function setAutoStart(enabled) {
+    const form = new FormData();
+    form.append('enabled', String(enabled));
+    try {
+        await fetch('/autostart', { method: 'POST', body: form });
+        autoStart.value = enabled;
+    } catch (err) {
+        toastError(err);
+    }
+}
+
 // ---------- widget screen corner ----------
 const CORNERS = [
     { id: 'tl', labelKey: 'positionTL' },
@@ -139,6 +157,13 @@ async function pushCurrent() {
                   :title="t(c.labelKey)"
                   @click="setCorner(c.id)">
                 </button>
+                <label class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 cursor-pointer" :title="t('autoStartHint')">
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-base-content/70">
+                    <Icon name="power" :size="12"/>
+                    {{ t('autoStartLabel') }}
+                  </span>
+                  <input type="checkbox" class="toggle toggle-primary toggle-sm" :checked="autoStart" @change="setAutoStart($event.target.checked)" :aria-label="t('autoStartLabel')"/>
+                </label>
               </div>
               <div class="w-10 h-2 border-x-2 border-b-2 border-neutral rounded-b-sm"></div>
             </div>
@@ -147,9 +172,9 @@ async function pushCurrent() {
           <div class="flex flex-col gap-2 flex-1 min-w-0">
             <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
             <p class="text-xs text-base-content/60">{{ t('textHint') }}</p>
-            <div class="flex gap-2 mt-1">
-              <input v-model="text" type="text" :placeholder="t('textPlaceholder')" class="input input-bordered input-lg auth-input flex-1 min-w-0" autofocus/>
-              <button type="submit" class="btn btn-primary btn-lg">{{ t('textSubmit') }}</button>
+            <div class="flex gap-2 mt-1 items-start">
+              <textarea v-model="text" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
+              <button type="submit" class="btn btn-primary">{{ t('textSubmit') }}</button>
             </div>
           </div>
         </div>

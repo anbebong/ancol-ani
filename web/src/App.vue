@@ -32,7 +32,7 @@ onMounted(loadVersion);
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/" class="flex items-center gap-2 shrink-0">
           <AppLogo :size="36"/>
-          <span class="font-extrabold text-lg hidden sm:inline whitespace-nowrap"><span class="gradient-text">Ancol-ani</span></span>
+          <span class="font-extrabold text-lg hidden sm:inline whitespace-nowrap"><span class="gradient-text">Ancol-Ani</span></span>
         </RouterLink>
 
         <nav class="hidden md:flex items-center gap-1 flex-1">
@@ -70,10 +70,15 @@ onMounted(loadVersion);
     </main>
 
     <footer class="flex items-center justify-center gap-1.5 text-xs text-base-content/50 pb-6">
-      <span>anbebong</span>
-      <RouterLink v-if="appInfo.version" to="/changelog" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('navChangelog')">
+      <span class="inline-flex items-center gap-1">
+        <Icon name="github" :size="14"/> anbebong
+      </span>
+      <RouterLink v-if="appInfo.version" :to="{ path: '/changelog', query: { section: 'version' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('navChangelog')">
         · v{{ appInfo.version }}
         <span v-if="hasUnseenUpdate" class="nav-dot"></span>
+      </RouterLink>
+      <RouterLink :to="{ path: '/changelog', query: { section: 'policy' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('footerPolicy')">
+        · {{ t('footerPolicy') }}
       </RouterLink>
     </footer>
 

@@ -1,4 +1,4 @@
-# Ancol-ani
+# Ancol-Ani
 
 Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings local và một sync server có web portal để đồng bộ/chia sẻ GIF qua tài khoản.
 
@@ -8,16 +8,16 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 
 | Thư mục | Là gì | Nhúng vào |
 |---|---|---|
-| repo root (`app.go`, `main.go`) | App desktop Wails: widget + HTTP server local `:8788` (`/gif`, `/text`, `/version`, `/changelog`) | `build/bin/ancol-ani.exe` |
+| repo root (`app.go`, `main.go`) | App desktop Wails: widget + HTTP server local, port tự dò từ `preferredPort` (48821) nếu bị chiếm (`/gif`, `/text`, `/version`, `/changelog`, `/position`, `/autostart`) | `build/bin/ancol-ani.exe` |
 | `frontend/` | UI widget (chỉ `index.html` + `src/gifPlayer.js`) | exe (`frontend/dist`) |
-| `web/` | Trang settings `localhost:8788` — Vue 3 + Vue Router (hash) | exe (`web/dist`) |
+| `web/` | Trang settings `localhost:<port>` — Vue 3 + Vue Router (hash) | exe (`web/dist`) |
 | `cmd/syncserver/` | Sync server Go (`:9090`, SQLite `data/`) | `syncserver.exe` |
 | `cmd/syncserver/portal/` | Web portal của server — Vue 3 + Vue Router (hash) | `syncserver.exe` (`portal/dist`) |
 | `ui/` | **Thiết kế dùng chung** của `web/` và `portal/`: theme, `pixel.css`, component, `modal.js`, `icons.js`, logo. Import qua `@ui/...`. Không có `package.json`. | — |
 
 ## Quy tắc
 
-- Tên app hiển thị cho người dùng viết là **"Ancol-ani"** (chỉ chữ A đầu viết hoa), không viết `ANCOL-ANI`. **Không đổi** các chuỗi kỹ thuật `ancol-ani`: tiêu đề cửa sổ (`Title` trong `main.go`, `<title>` của `frontend/index.html`, vì `app.go` tìm cửa sổ widget theo đúng tiêu đề này), khóa localStorage (`ancol-ani-*`, đổi là người dùng mất đăng nhập/liên kết), tên file exe và tên sản phẩm của bộ cài.
+- Tên app hiển thị cho người dùng viết là **"Ancol-Ani"** (cả hai chữ A đầu đều viết hoa), không viết `ANCOL-ANI` hay `Ancol-ani`. **Không đổi** các chuỗi kỹ thuật viết thường `ancol-ani`: tiêu đề cửa sổ widget (`Title` trong `main.go`, `<title>` của `frontend/index.html`, vì `app.go`/`findWindowHandle` tìm cửa sổ widget theo đúng tiêu đề `"ancol-ani"` này), khóa localStorage (`ancol-ani-*`, đổi là người dùng mất đăng nhập/liên kết), tên file exe, tên gói `wails.json` (`name`/`outputfilename`) và tên sản phẩm của bộ cài.
 
 - **Giao diện chung sửa ở `ui/`**, rồi build lại cả `web/` và `portal/`. Không chép component/CSS sang từng project. Icon mới: thêm vào `ui/icons.js` (lucide-static).
 - Hai trang web phải giữ cùng thiết kế (theme daisyUI "pixel", thanh điều hướng, card, toast/alert). Trang settings song ngữ: mọi chữ hiển thị đi qua `t()` trong `web/src/i18n.js`, thêm key cho **cả** `vi` và `en`.
@@ -27,6 +27,8 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 - Lỗi server trả về 401 nghĩa là "phiên đã mất" (client tự đăng xuất). Lỗi nghiệp vụ như sai mật khẩu hiện tại thì dùng 403/400.
 - Portal và client **không bao giờ dùng chung một token**: khi liên kết hay "Mở portal" thì luôn xin token mới qua `POST /auth/token` (DEV-NOTES mục 5). Đây không phải OIDC, mà là luồng chuyển hướng tự viết; token sống 1 giờ, chưa có refresh token.
 - Vị trí widget tính bằng **pixel thật** và đặt qua Win32 `SetWindowPos(HWND_TOPMOST)` (`app.go`); đừng quay lại `runtime.WindowSetPosition` với kích thước logic (lệch khi scale ≠ 100%).
+
+- Server local **không có port cố định**: `resolveListener` (`app.go`) dò từ `preferredPort` (48821) tới khi tìm được port trống, ghi vào `%AppData%\ancol-ani\port.txt`. `LocalPort()` (bind cho widget) và cửa sổ settings riêng (`runSettingsApp` trong `main.go`, process khác nên không đọc được biến Go của widget) đều lấy port qua đó, không hardcode. Đừng quay lại hardcode `8788` ở đâu cả — chỉ có `preferredPort` là nơi cố định một con số.
 
 ## Build (Windows, chi tiết ở DEV-NOTES mục 2)
 

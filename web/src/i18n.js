@@ -6,7 +6,7 @@ export const translations = {
 
         navWidget: 'Hoạt ảnh',
         navLibrary: 'Thư viện',
-        navGallery: 'Khám phá',
+        navGallery: 'Cộng đồng',
         navLink: 'Liên kết',
         langToggleTitle: 'Switch to English',
 
@@ -22,6 +22,8 @@ export const translations = {
         positionTR: 'Trên phải',
         positionBL: 'Dưới trái',
         positionBR: 'Dưới phải',
+        autoStartLabel: 'Khởi động cùng Windows',
+        autoStartHint: 'Tự mở widget mỗi khi bạn đăng nhập vào máy.',
         gifLabel: 'Ảnh GIF',
         gifCurrent: 'Đang hiển thị',
         dropzoneDefault: 'Kéo thả file GIF vào đây',
@@ -45,7 +47,7 @@ export const translations = {
         quotaFull: 'Đã đạt số lượng GIF tối đa ({quota}). Xóa bớt 1 GIF để thêm cái mới.',
         badgePublic: 'công khai',
         badgePrivate: 'riêng tư',
-        useThis: 'Dùng cho widget',
+        useThis: 'Sử dụng GIF',
         shareNamePlaceholder: 'Tên GIF (bắt buộc để chia sẻ)',
         shareTagsPlaceholder: 'Tag, phân tách bằng dấu phẩy',
         shareBtn: 'Chia sẻ',
@@ -64,7 +66,7 @@ export const translations = {
         confirmPushUpload: 'Tải ảnh widget hiện tại lên thư viện server?',
 
         // Gallery page
-        galleryTitle: 'Khám phá',
+        galleryTitle: 'Cộng đồng',
         gallerySubtitle: 'GIF mọi người đã chia sẻ công khai.',
         searchPlaceholder: 'Tìm theo tên hoặc tag...',
         userFilterPlaceholder: 'Lọc theo người chia sẻ...',
@@ -93,8 +95,9 @@ export const translations = {
         needLink: 'Cần liên kết tài khoản trước',
 
         // What's new
-        navChangelog: 'Có gì mới',
-        changelogTitle: 'Có gì mới',
+        navChangelog: 'Về Ancol-Ani',
+        footerPolicy: 'Chính sách',
+        changelogTitle: 'Về Ancol-Ani',
         changelogSubtitle: 'Phiên bản đang chạy: v{version}',
         changelogCurrent: 'đang dùng',
         changelogError: 'Không tải được changelog.',
@@ -125,6 +128,8 @@ export const translations = {
         positionTR: 'Top right',
         positionBL: 'Bottom left',
         positionBR: 'Bottom right',
+        autoStartLabel: 'Start with Windows',
+        autoStartHint: 'Open the widget automatically whenever you log in.',
         gifLabel: 'GIF image',
         gifCurrent: 'Now showing',
         dropzoneDefault: 'Drop a GIF file here',
@@ -192,8 +197,9 @@ export const translations = {
         toastExpired: 'Session expired or revoked, please link again',
         needLink: 'Link an account first',
 
-        navChangelog: "What's new",
-        changelogTitle: "What's new",
+        navChangelog: 'About Ancol-Ani',
+        footerPolicy: 'Policy',
+        changelogTitle: 'About Ancol-Ani',
         changelogSubtitle: 'Running version: v{version}',
         changelogCurrent: 'current',
         changelogError: 'Could not load the changelog.',

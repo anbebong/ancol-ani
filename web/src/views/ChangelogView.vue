@@ -1,13 +1,29 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { t } from '../i18n.js';
 import { appInfo, loadChangelog, markVersionSeen } from '../appInfo.js';
 
+const route = useRoute();
 const releases = ref([]);
 const loading = ref(true);
 const failed = ref(false);
+
+// Footer "Chính sách" / version links (App.vue) both route here with
+// ?section=policy|version, since hash-history routing already uses '#'
+// for the route itself - a plain '#anchor' would collide with it.
+async function scrollToSection(section) {
+    if (!section) return;
+    await nextTick();
+    document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Watches the query too, not just onMounted: clicking the other footer
+// link while already on this page reuses the same component instance
+// (same route, only the query changes), so onMounted alone would miss it.
+watch(() => route.query.section, (section) => scrollToSection(section));
 
 onMounted(async () => {
     try {
@@ -18,6 +34,8 @@ onMounted(async () => {
         loading.value = false;
         markVersionSeen();
     }
+
+    scrollToSection(route.query.section);
 });
 
 // Color per group title (both languages / common wordings).
@@ -28,12 +46,76 @@ function groupClass(title) {
     if (/thay đổi|change|improv/.test(s)) return 'badge-warning';
     return 'badge-neutral';
 }
+
+// Privacy notice kept in Vietnamese only (legal text for a Vietnam-based
+// personal app, per Nghị định 13/2023/NĐ-CP) regardless of the UI
+// language toggle - same as how a site's Điều khoản/Privacy page usually
+// isn't swapped per visitor language.
+const policySections = [
+    {
+        title: 'Phạm vi dữ liệu thực sự xử lý / không thu thập',
+        items: [
+            'Không thu thập hồ sơ cá nhân, lịch sử duyệt web/hoạt động máy, danh bạ hay bất kỳ tệp tin nào khác ngoài ảnh GIF bạn tự chọn.',
+            'Chỉ dùng tên đăng nhập, mật khẩu ở mức tối thiểu để xác thực khi bạn chủ động liên kết tài khoản. Không liên kết thì mọi thứ chỉ nằm trên máy bạn, không gửi đi đâu.',
+        ],
+    },
+    {
+        title: 'Mục đích sử dụng & không chia sẻ/mua bán dữ liệu',
+        items: [
+            'Thông tin đăng nhập chỉ dùng để đồng bộ/chia sẻ GIF theo ý bạn, không dùng cho mục đích khác.',
+            'Không chuyển giao, không tiết lộ, không mua bán dữ liệu cho bên thứ ba nào.',
+        ],
+    },
+    {
+        title: 'Lưu trữ, bảo mật & xóa/hủy dữ liệu',
+        items: [
+            'Mật khẩu được mã hóa an toàn, không lưu dạng chữ thường. Phiên đăng nhập chỉ có hiệu lực ngắn, không giữ lâu dài.',
+            'Hủy liên kết tài khoản bất cứ lúc nào ở trang Tài khoản. Muốn xóa toàn bộ dữ liệu, liên hệ địa chỉ bên dưới.',
+        ],
+    },
+    {
+        title: 'Trách nhiệm & giới hạn sử dụng hợp pháp',
+        items: [
+            'Không dùng ứng dụng/tài khoản vào mục đích vi phạm pháp luật, không can thiệp trái phép vào máy chủ.',
+            'Người dùng tự bảo quản thông tin đăng nhập của chính mình.',
+        ],
+    },
+    {
+        title: 'Thông tin liên hệ',
+        items: [
+            'Có sự cố bảo mật, lộ lọt dữ liệu, hoặc cần hỗ trợ/yêu cầu xóa dữ liệu, liên hệ địa chỉ bên dưới.',
+        ],
+    },
+];
+const policyContact = 'angokodau@gmail.com';
 </script>
 
 <template>
   <div class="flex flex-col gap-6">
     <PageHeader icon="sparkles" :title="t('changelogTitle')"
       :subtitle="appInfo.version ? t('changelogSubtitle', { version: appInfo.version }) : ''"/>
+
+    <div id="section-policy" class="card bg-base-100 max-w-3xl">
+      <div class="card-body gap-4">
+        <h2 class="text-xl font-extrabold flex items-center gap-2">
+          <Icon name="shield"/> Chính sách bảo mật & quyền riêng tư
+        </h2>
+        <p class="text-xs text-base-content/60 -mt-1">
+          Ancol-Ani là app cá nhân, tuân thủ Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân.
+        </p>
+
+        <div v-for="(section, si) in policySections" :key="si" class="flex flex-col gap-2">
+          <span class="badge badge-sm badge-neutral self-start">{{ section.title }}</span>
+          <ul class="changelog-list">
+            <li v-for="(item, ii) in section.items" :key="ii">{{ item }}</li>
+          </ul>
+        </div>
+
+        <p class="text-xs text-base-content/60">
+          Liên hệ về dữ liệu cá nhân: <a :href="'mailto:' + policyContact" class="link link-primary">{{ policyContact }}</a>
+        </p>
+      </div>
+    </div>
 
     <div v-if="loading" class="flex justify-center py-12"><span class="loading loading-spinner loading-lg text-primary"></span></div>
 
@@ -42,7 +124,7 @@ function groupClass(title) {
       <p>{{ t('changelogError') }}</p>
     </div>
 
-    <div v-else class="flex flex-col gap-5 max-w-3xl">
+    <div v-else id="section-version" class="flex flex-col gap-5 max-w-3xl">
       <div v-for="r in releases" :key="r.version" class="card bg-base-100" :class="{ 'release-current': r.version === appInfo.version }">
         <div class="card-body gap-4">
           <div class="flex items-center gap-3 flex-wrap">

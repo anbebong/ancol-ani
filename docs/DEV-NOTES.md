@@ -160,7 +160,7 @@ Thứ tự: sửa 3 file trên → `cd web && npm run build` → build frontend 
 
 ## 10. Deploy sync server lên điện thoại (production)
 
-Sync server chạy công khai tại **https://game.anbebong.io.vn**, trên điện thoại Android tự host (Termux, SSH `u0_a249@192.168.0.105 -p 8022`, đăng nhập bằng key). Hạ tầng điện thoại (Termux, proot, tmux, Cloudflare Tunnel, Termux:Boot) do repo `code-game/dino-race` dựng sẵn; xem `dino-race/deploy/README.md` để hiểu chi tiết. Ancol-ani thay chỗ server dino-race trên cổng 7879.
+Sync server chạy công khai tại **https://game.anbebong.io.vn**, trên điện thoại Android tự host (Termux, SSH `u0_a249@192.168.0.105 -p 8022`, đăng nhập bằng key). Hạ tầng điện thoại (Termux, proot, tmux, Cloudflare Tunnel, Termux:Boot) do repo `code-game/dino-race` dựng sẵn; xem `dino-race/deploy/README.md` để hiểu chi tiết. Ancol-Ani thay chỗ server dino-race trên cổng 7879.
 
 **Deploy (1 lệnh, từ gốc repo trên Windows, Git Bash):**
 ```bash
@@ -170,16 +170,16 @@ Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mo
 
 | Thứ | Ở đâu |
 |---|---|
-| Tunnel ingress (cấu hình trên Cloudflare Dashboard) | `game.anbebong.io.vn` → `localhost:7879` (**Ancol-ani**), `mothe.anbebong.io.vn` → `localhost:8080` (Ancha). Domain gốc `anbebong.io.vn` **không** đi qua tunnel này. |
+| Tunnel ingress (cấu hình trên Cloudflare Dashboard) | `game.anbebong.io.vn` → `localhost:7879` (**Ancol-Ani**), `mothe.anbebong.io.vn` → `localhost:8080` (Ancha). Domain gốc `anbebong.io.vn` **không** đi qua tunnel này. |
 | Binary | `~/ancolani/ancolani-sync-arm64` (ghi đè mỗi lần deploy) |
 | Dữ liệu | `~/ancolani/data/ancol-ani.db`: **dữ liệu thật**, deploy không đụng tới. Không chép DB dev từ máy lên (có tài khoản test `demo/demo123`). |
 | JWT secret | `~/ancolani/.jwt-secret` (chmod 600), sinh ngẫu nhiên ở lần deploy đầu, giữ nguyên về sau. Đổi file này là mọi người bị đăng xuất. |
-| Vòng lặp chạy | `~/run.sh` (nguồn: `deploy/phone/run.sh`): Ancol-ani :7879 + Ancha :8080 + cloudflared, trong proot, tmux session `dinorace`. |
+| Vòng lặp chạy | `~/run.sh` (nguồn: `deploy/phone/run.sh`): Ancol-Ani :7879 + Ancha :8080 + cloudflared, trong proot, tmux session `dinorace`. |
 | Log | `~/dinorace-tunnel.log` (gộp cả 3) |
 
 - Cấp quyền admin trên production: đăng ký tài khoản trên portal, rồi chạy `ssh -p 8022 u0_a249@192.168.0.105 "cd ~/ancolani && ./ancolani-sync-arm64 -make-admin <username>"`.
 - **Quay lại dino-race:** chạy `bash deploy/deploy-arm.sh` trong repo dino-race. Script đó ghi đè lại `~/run.sh` bản dino-race; dữ liệu dino-race (`~/server`, `~/users.json`, `~/admin.json`) vẫn còn nguyên. Bản `run.sh` dino-race cũ cũng được lưu ở `~/run.sh.dinorace-backup`.
-- Ngược lại: **đừng chạy `deploy-arm.sh` của dino-race** nếu muốn giữ Ancol-ani, vì nó sẽ đưa dino-race trở lại cổng 7879.
+- Ngược lại: **đừng chạy `deploy-arm.sh` của dino-race** nếu muốn giữ Ancol-Ani, vì nó sẽ đưa dino-race trở lại cổng 7879.
 - `deploy/phone/maintenance-on.sh` là bản của repo này: giống bản dino-race nhưng kill thêm `ancolani-sync-arm64`.
 
 ## 11. Giới hạn bảo mật của sync server (đang public)

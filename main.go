@@ -2,10 +2,11 @@ package main
 
 import (
 	"embed"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"testing/fstest"
 	"unsafe"
 
 	"github.com/wailsapp/wails/v2"
@@ -112,17 +113,36 @@ func acquireSingleInstanceLock() bool {
 // run in a separate process (see main's "settings" branch). It's a plain
 // resizable Wails window - not frameless/topmost/click-through like the
 // widget - whose only page immediately navigates its real WebView2 to the
-// already-running local settings server (startLocalServer in app.go,
-// :8788), the same page a browser would open. Loading a single inline
-// redirect page like this, instead of embedding web/dist a second time,
-// means the settings page's own fetch('/text'), fetch('/position') etc.
-// resolve against that server's origin like they already do for any
-// browser tab open on it - not against Wails' own internal asset origin.
+// already-running local settings server (startLocalServer in app.go), the
+// same page a browser would open. Loading a single inline redirect page
+// like this, instead of embedding web/dist a second time, means the
+// settings page's own fetch('/text'), fetch('/position') etc. resolve
+// against that server's origin like they already do for any browser tab
+// open on it - not against Wails' own internal asset origin.
+//
+// This window has no Bind, so its page can't call a Go method the way
+// frontend/index.html calls LocalPort(). It's also a separate OS process
+// from the widget, so it can't read activePort (an in-memory var) either
+// - the widget process saves the port it actually bound to into
+// settings.data's Port field (resolveListener/startup in app.go), and
+// loadSettings/getSettings here (same package, same encryption) read it
+// back from there.
 func runSettingsApp() {
-	settingsAssets, err := fs.Sub(settingsWinAssets, "settingswin")
+	loadSettings()
+	port := getSettings().Port
+	if port == "" {
+		println("Error: widget not running or has no local server yet")
+		return
+	}
+
+	raw, err := settingsWinAssets.ReadFile("settingswin/index.html")
 	if err != nil {
 		println("Error:", err.Error())
 		return
+	}
+	html := strings.ReplaceAll(string(raw), "__PORT__", port)
+	settingsAssets := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(html)},
 	}
 
 	err = wails.Run(&options.App{

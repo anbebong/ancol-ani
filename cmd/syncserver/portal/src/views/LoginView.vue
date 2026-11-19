@@ -69,7 +69,7 @@ async function submit() {
   <div class="auth-screen">
     <div class="w-full max-w-sm flex flex-col items-center">
       <div class="auth-mascot">
-        <img src="../assets/mascot.gif" alt="Ancol-ani mascot"/>
+        <img src="../assets/mascot.gif" alt="Ancol-Ani mascot"/>
       </div>
 
       <div class="card bg-base-100 w-full auth-card">
@@ -78,7 +78,7 @@ async function submit() {
           <div class="text-center flex flex-col gap-1">
             <h1 class="text-2xl font-extrabold tracking-tight flex items-center justify-center gap-2.5">
               <AppLogo :size="34"/>
-              <span class="gradient-text">Ancol-ani</span>
+              <span class="gradient-text">Ancol-Ani</span>
             </h1>
             <p class="text-sm text-base-content/60">
               {{ isLogin
@@ -89,7 +89,7 @@ async function submit() {
 
           <div v-if="callback" class="alert alert-info text-xs py-2">
             <Icon name="key"/>
-            <span>Đăng nhập để liên kết tài khoản với app Ancol-ani trên máy bạn.</span>
+            <span>Đăng nhập để liên kết tài khoản với app Ancol-Ani trên máy bạn.</span>
           </div>
 
           <div role="tablist" class="auth-tabs">

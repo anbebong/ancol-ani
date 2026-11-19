@@ -13,7 +13,7 @@ defineProps({
   <!-- padding in px, not %: a % padding resolves against the *parent's*
        width and can swallow the whole tile -->
   <span class="app-logo" :style="{ width: size + 'px', height: size + 'px', padding: Math.round(size * 0.12) + 'px' }">
-    <img :src="logo" alt="Ancol-ani"/>
+    <img :src="logo" alt="Ancol-Ani"/>
   </span>
 </template>
 

@@ -11,10 +11,12 @@ import (
 	"image/gif"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,9 +25,45 @@ import (
 	"unsafe"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/sys/windows/registry"
 )
 
-const clientLocalPort = "8788"
+// preferredPort is where the local server tries to listen first. Picked
+// away from the common 8788-ish / 8080-ish ranges other local dev tools
+// often grab, to make a collision less likely in the first place -
+// resolveListener below still scans forward and falls back to any free
+// port if even this range is all taken.
+const preferredPort = 40404
+const portScanRange = 50
+
+// activePort is set once, synchronously, before startLocalServer's
+// goroutine starts - every reader (LocalPort, the /position etc. HTTP
+// handlers don't need it, OpenSettings's redirect page) only runs after
+// that point, so a plain string is fine without an atomic.Value.
+var activePort string
+
+// resolveListener scans forward from preferredPort for a free one, and
+// as a last resort asks the OS for any free port (net.Listen with ":0").
+// Bound to 127.0.0.1 only - earlier versions used 0.0.0.0 so a phone on
+// the same LAN could reach this page too, but that also meant anyone
+// else on that LAN/Wi-Fi could reach it; narrowed to localhost-only.
+func resolveListener() (net.Listener, string) {
+	for i := 0; i < portScanRange; i++ {
+		port := strconv.Itoa(preferredPort + i)
+		if ln, err := net.Listen("tcp", "127.0.0.1:"+port); err == nil {
+			return ln, port
+		}
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		// Every port in range AND the OS-assigned fallback failed -
+		// nothing left to try; the app continues without a local server
+		// (widget still shows, just without GIF/text/settings working).
+		return nil, ""
+	}
+	return ln, strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+}
 
 //go:embed VERSION
 var rawVersion string
@@ -48,7 +86,8 @@ const defaultText = "Ancol Hello"
 //go:embed frontend/src/mascot.gif
 var defaultGif []byte
 
-// The local settings page (http://localhost:8788) is its own small Vite
+// The local settings page (http://localhost:<port>, port chosen by
+// resolveListener) is its own small Vite
 // project under web/, built separately (cd web && npm run build) and
 // embedded here as static files, instead of living as an inline HTML
 // string in Go.
@@ -100,6 +139,11 @@ var validCorners = map[string]bool{"br": true, "bl": true, "tr": true, "tl": tru
 type widgetSettings struct {
 	Corner string `json:"corner"`
 	Text   string `json:"text"`
+	// Port is only here so the separate "settings" subprocess (main.go's
+	// runSettingsApp, spawned by OpenSettings) can learn which port THIS
+	// process actually bound to - it has no other channel back to this
+	// process, since activePort below only lives in that process' memory.
+	Port string `json:"port"`
 }
 
 // currentSettings is read by the window-positioning code (main goroutine +
@@ -241,10 +285,10 @@ func NewApp() *App {
 }
 
 // LocalPort is bound to the frontend (main.go's Bind) so frontend/index.html
-// can build its fetch URLs from the single source of truth (clientLocalPort)
+// can build its fetch URLs from the single source of truth (activePort)
 // instead of hardcoding the port in JS too.
 func (a *App) LocalPort() string {
-	return clientLocalPort
+	return activePort
 }
 
 // OpenSettings is bound to the widget's frontend (clicked on the GIF/text
@@ -281,13 +325,28 @@ func (a *App) startup(ctx context.Context) {
 	makeClickThrough(hwnd)
 
 	go watchForMonitorChanges(hwnd)
-	go startLocalServer(ctx)
+
+	// Resolved synchronously (not inside startLocalServer's goroutine) so
+	// activePort and settings.data's Port are both set before anything -
+	// the settings window, a fast double-click on the widget - could
+	// possibly read them.
+	ln, port := resolveListener()
+	activePort = port
+	if port != "" {
+		saveSettings(func(s *widgetSettings) { s.Port = port })
+	}
+	go startLocalServer(ctx, ln)
 }
 
-// Serves a single local page (http://localhost:8788): type text in, submit,
-// and it shows up directly on the widget's text panel. No server/socket
-// involved - this page is the only source of text.
-func startLocalServer(ctx context.Context) {
+// Serves the local settings page: type text in, submit, and it shows up
+// directly on the widget's text panel. No server/socket involved - this
+// page is the only source of text. ln is nil if resolveListener couldn't
+// bind anything, in which case the widget still runs, just without
+// GIF/text/settings.
+func startLocalServer(ctx context.Context, ln net.Listener) {
+	if ln == nil {
+		return
+	}
 	mux := http.NewServeMux()
 
 	webFS, err := fs.Sub(webDist, "web/dist")
@@ -393,7 +452,75 @@ func startLocalServer(ctx context.Context) {
 		w.Write([]byte(getCorner()))
 	})
 
-	http.ListenAndServe("0.0.0.0:"+clientLocalPort, mux)
+	mux.HandleFunc("/autostart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			enabled := strings.TrimSpace(r.FormValue("enabled")) == "true"
+			if err := setAutoStart(enabled); err != nil {
+				http.Error(w, "cannot save", http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if isAutoStartEnabled() {
+			w.Write([]byte("true"))
+		} else {
+			w.Write([]byte("false"))
+		}
+	})
+
+	http.Serve(ln, mux)
+}
+
+// autoStartRegPath/Name follow Windows' standard per-user autostart
+// mechanism (HKCU, not HKLM, so no admin rights needed): any value under
+// this key whose data is a path gets launched once at login.
+const (
+	autoStartRegPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+	autoStartName    = "ancol-ani"
+)
+
+// isAutoStartEnabled reports whether the Run key currently has our value
+// set, regardless of what path it points to (it's not re-validated
+// against the exe's current location - see setAutoStart's comment).
+func isAutoStartEnabled() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegPath, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+
+	_, _, err = k.GetStringValue(autoStartName)
+	return err == nil
+}
+
+// setAutoStart writes (or removes) the Run value, pointing at wherever
+// this exe is currently running from (os.Executable()) - there's no fixed
+// install location, so the path is only known at the moment the user
+// flips the toggle. If the exe is later moved, autostart silently stops
+// working until the user toggles it off and back on from the new
+// location; this is intentionally not auto-repaired on startup.
+func setAutoStart(enabled bool) error {
+	k, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+
+	if !enabled {
+		err := k.DeleteValue(autoStartName)
+		if err != nil && err != registry.ErrNotExist {
+			return err
+		}
+		return nil
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return k.SetStringValue(autoStartName, exe)
 }
 
 func findWindowHandle() uintptr {
@@ -403,7 +530,7 @@ func findWindowHandle() uintptr {
 // settingsWindowTitle is the title of the second window opened by
 // OpenSettings (runSettingsApp in main.go) - distinct from "ancol-ani" so
 // findWindowHandle (used for the click-through widget) never matches it.
-const settingsWindowTitle = "Ancol-ani - Cài đặt"
+const settingsWindowTitle = "Ancol-Ani - Cài đặt"
 
 func findSettingsWindowHandle() uintptr {
 	return findWindowByTitle(settingsWindowTitle)
