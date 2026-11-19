@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -246,6 +247,25 @@ func (a *App) LocalPort() string {
 	return clientLocalPort
 }
 
+// OpenSettings is bound to the widget's frontend (clicked on the GIF/text
+// bubble) and spawns a second, independent window for the settings page -
+// a fresh run of this same exe with the "settings" argument (see main.go's
+// runSettingsApp), so the widget keeps animating in its own window/process
+// untouched while the settings window runs its own real WebView2 instance.
+func (a *App) OpenSettings() {
+	if hwnd := findSettingsWindowHandle(); hwnd != 0 {
+		procSetForegroundWindow.Call(hwnd)
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "settings")
+	cmd.Start()
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
@@ -377,8 +397,21 @@ func startLocalServer(ctx context.Context) {
 }
 
 func findWindowHandle() uintptr {
+	return findWindowByTitle("ancol-ani")
+}
+
+// settingsWindowTitle is the title of the second window opened by
+// OpenSettings (runSettingsApp in main.go) - distinct from "ancol-ani" so
+// findWindowHandle (used for the click-through widget) never matches it.
+const settingsWindowTitle = "Ancol-ani - Cài đặt"
+
+func findSettingsWindowHandle() uintptr {
+	return findWindowByTitle(settingsWindowTitle)
+}
+
+func findWindowByTitle(title string) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString("wailsWindow")
-	titlePtr, _ := syscall.UTF16PtrFromString("ancol-ani")
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
 
 	hwnd, _, _ := procFindWindow.Call(
 		uintptr(unsafe.Pointer(classNamePtr)),
@@ -531,10 +564,11 @@ const (
 var gwlExStyle = int32(-20)
 
 var (
-	user32            = syscall.NewLazyDLL("user32.dll")
-	procFindWindow    = user32.NewProc("FindWindowW")
-	procGetWindowLong = user32.NewProc("GetWindowLongW")
-	procSetWindowLong = user32.NewProc("SetWindowLongW")
+	user32                  = syscall.NewLazyDLL("user32.dll")
+	procFindWindow          = user32.NewProc("FindWindowW")
+	procGetWindowLong       = user32.NewProc("GetWindowLongW")
+	procSetWindowLong       = user32.NewProc("SetWindowLongW")
+	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 )
 
 const (
@@ -572,11 +606,15 @@ func hideFromTaskbar(ctx context.Context, hwnd uintptr) {
 	runtime.WindowShow(ctx)
 }
 
+// makeClickThrough used to also set WS_EX_TRANSPARENT so every click
+// passed through to whatever sat behind the widget. That's gone now that
+// clicking the widget opens the settings window (OpenSettings) - only
+// WS_EX_LAYERED stays, needed for the GIF's alpha transparency.
 func makeClickThrough(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 
 	style, _, _ := procGetWindowLong.Call(hwnd, uintptr(gwlExStyle))
-	procSetWindowLong.Call(hwnd, uintptr(gwlExStyle), style|uintptr(wsExLayered)|uintptr(wsExTransparent))
+	procSetWindowLong.Call(hwnd, uintptr(gwlExStyle), style|uintptr(wsExLayered))
 }

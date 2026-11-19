@@ -64,20 +64,60 @@
             text-align: center;
             word-break: break-word;
         }
-        #stage {
+        #stage-wrap {
+            position: relative;
             width: 70px;
             height: 70px;
             flex: 0 0 70px;
+        }
+        #stage {
+            width: 70px;
+            height: 70px;
             object-fit: contain;
             -webkit-user-select: none;
             user-select: none;
             -webkit-user-drag: none;
+            cursor: pointer;
         }
+        /* Right-click overlay: two small buttons stacked over the GIF
+           (the widget window is only 70x100px, too small for a menu to
+           pop out past its own bounds). Hidden until contextmenu fires. */
+        #menu-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            gap: 2px;
+            padding: 4px;
+            background: rgba(20, 20, 43, 0.85);
+            border-radius: 4px;
+        }
+        #menu-overlay.is-open { display: flex; }
+        #menu-overlay button {
+            font: 700 9px/1.2 "Segoe UI", system-ui, sans-serif;
+            color: #ffffff;
+            background: #8b73ff;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 2px;
+            cursor: pointer;
+        }
+        #menu-overlay button:hover { background: #a894ff; }
+        #menu-overlay button.cancel { background: rgba(255, 255, 255, 0.15); }
+        #menu-overlay button.cancel:hover { background: rgba(255, 255, 255, 0.25); }
     </style>
 </head>
 <body>
 <div id="text-panel"><div id="text-bubble"><span id="text-content">Ancol Hello</span></div></div>
-<canvas id="stage"></canvas>
+<div id="stage-wrap">
+    <canvas id="stage"></canvas>
+    <div id="menu-overlay">
+        <button id="menu-settings" type="button">Cài đặt</button>
+        <button id="menu-cancel" class="cancel" type="button">Hủy</button>
+    </div>
+</div>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
 
@@ -110,6 +150,26 @@
 
     window.runtime.EventsOn('gif-changed', reload);
     reload();
+
+    // Right-clicking the widget shows "Cài đặt" / "Hủy" as an HTML overlay
+    // drawn over the GIF itself, instead of a native OS menu - the widget
+    // window is only 70x100px, so a real popup menu would try to draw
+    // outside it and get clipped. The widget itself is no longer
+    // click-through (see makeClickThrough). Left-click does nothing.
+    const menuOverlay = document.getElementById('menu-overlay');
+
+    document.body.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        menuOverlay.classList.add('is-open');
+    });
+
+    document.getElementById('menu-settings').addEventListener('click', () => {
+        menuOverlay.classList.remove('is-open');
+        window.go.main.App.OpenSettings();
+    });
+    document.getElementById('menu-cancel').addEventListener('click', () => {
+        menuOverlay.classList.remove('is-open');
+    });
 </script>
 </body>
 </html>

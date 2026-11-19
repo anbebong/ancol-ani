@@ -6,6 +6,15 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Có g�
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Có gì mới** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.3 — 2026-11-19
+
+### Mới
+- Bấm phải chuột vào widget để hiện "Cài đặt / Hủy" đè lên GIF; bấm "Cài đặt" mở trang settings trong một cửa sổ riêng (vẫn là WebView2 thật, không phải trình duyệt), widget vẫn chạy hoạt ảnh bình thường bên cạnh.
+- Chỉ chạy được một widget cùng lúc: mở app lần hai tự đưa widget đang chạy lên trước thay vì chạy thêm một bản nữa.
+
+### Thay đổi
+- Widget không còn "click-through" hoàn toàn (trước đây mọi chuột xuyên qua widget) để nhận được click chuột phải.
+
 ## 1.1.2 — 2026-11-19
 
 ### Thay đổi
