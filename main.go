@@ -140,7 +140,16 @@ func runSettingsApp() {
 		println("Error:", err.Error())
 		return
 	}
+	// `ancol-ani.exe settings checkupdate` (launchUpdateScript in app.go,
+	// reopening the settings window right after an update) lands the page
+	// straight back on the Về Ancol-Ani tab's version section, instead of
+	// the normal default (Widget page) a plain `settings` launch gets.
+	target := ""
+	if len(os.Args) > 2 && os.Args[2] == "checkupdate" {
+		target = "#/changelog?section=version"
+	}
 	html := strings.ReplaceAll(string(raw), "__PORT__", port)
+	html = strings.ReplaceAll(html, "__TARGET__", target)
 	settingsAssets := fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(html)},
 	}

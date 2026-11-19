@@ -133,13 +133,13 @@ const policyContact = 'angokodau@gmail.com';
 <template>
   <div class="flex flex-col gap-6">
     <PageHeader icon="sparkles" :title="t('changelogTitle')"
-      :subtitle="appInfo.version ? t('changelogSubtitle', { version: appInfo.version }) : ''"/>
-
-    <button type="button" class="btn btn-primary self-start gap-2" :disabled="checkingUpdate" @click="checkForUpdate">
-      <span v-if="checkingUpdate" class="loading loading-spinner loading-sm"></span>
-      <Icon v-else name="download"/>
-      Kiểm tra cập nhật
-    </button>
+      :subtitle="appInfo.version ? t('changelogSubtitle', { version: appInfo.version }) : ''">
+      <button type="button" class="btn btn-primary gap-2" :disabled="checkingUpdate" @click="checkForUpdate">
+        <span v-if="checkingUpdate" class="loading loading-spinner loading-sm"></span>
+        <Icon v-else name="download"/>
+        Kiểm tra cập nhật
+      </button>
+    </PageHeader>
 
     <div id="section-policy" class="card bg-base-100 max-w-3xl">
       <div class="card-body gap-4">

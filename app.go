@@ -205,18 +205,54 @@ func applyUpdate(downloadURL string) error {
 // which spawns an independent process rather than a child of this one,
 // so it survives this process quitting right after).
 func launchUpdateScript(exePath, newExePath string) error {
-	pid := os.Getpid()
+	exeName := filepath.Base(exePath)
+	logPath := filepath.Join(os.TempDir(), "ancol-ani-update.log")
+
+	// Wait by IMAGENAME, not a single captured PID: the widget and the
+	// separate settings window (main.go's "settings" subcommand, its own
+	// OS process) are both ancol-ani.exe and both hold the file open for
+	// as long as they're running, so waiting on only one of them left
+	// "move" hitting "Access is denied" whenever the other was still up
+	// (the /apply-update handler now also asks the settings window to
+	// close, but this loop is the real guarantee, not that courtesy).
+	//
+	// "move" can also still fail right after every instance is gone -
+	// likely Windows Defender/AV briefly scanning the freshly-downloaded
+	// .new file, or the OS not having fully released a handle the
+	// instant a process exits - so it's retried too, instead of trusting
+	// it to succeed on the first try. Only "start" the result once
+	// ".new" is actually gone (meaning move succeeded); if every retry
+	// fails, fall back to relaunching the untouched old exe rather than
+	// leaving the user with nothing running, and leave both the log and
+	// the still-present ".new" file for a human to look at.
 	script := fmt.Sprintf(`@echo off
+set LOG="%s"
+echo [update] started, waiting for all %s instances to exit > %%LOG%%
 :wait
-tasklist /fi "PID eq %d" 2>NUL | find "%d" >NUL
+tasklist /fi "IMAGENAME eq %s" 2>NUL | find /I "%s" >NUL
 if not errorlevel 1 (
     timeout /t 1 /nobreak >NUL
     goto wait
 )
-move /y "%s" "%s" >NUL
+echo [update] no instances left, moving new exe into place >> %%LOG%%
+set TRIES=0
+:moveretry
+move /y "%s" "%s" >> %%LOG%% 2>&1
+if exist "%s" (
+    set /a TRIES+=1
+    if %%TRIES%% lss 10 (
+        timeout /t 1 /nobreak >NUL
+        goto moveretry
+    )
+    echo [update] FAILED after 10 tries, leaving .new and starting old exe as-is >> %%LOG%%
+) else (
+    echo [update] move succeeded after %%TRIES%% retries >> %%LOG%%
+)
 start "" "%s"
+timeout /t 2 /nobreak >NUL
+start "" "%s" settings checkupdate
 del "%%~f0"
-`, pid, pid, newExePath, exePath, exePath)
+`, logPath, exeName, exeName, exeName, newExePath, exePath, newExePath, exePath, exePath)
 
 	scriptPath := filepath.Join(os.TempDir(), "ancol-ani-update.bat")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
@@ -665,6 +701,15 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 		w.Write([]byte("ok"))
 		go func() {
 			time.Sleep(300 * time.Millisecond)
+			// This request itself came from the settings window (a
+			// separate process/exe invocation) - that process is still
+			// holding its own open handle on this exe's file, same as
+			// the widget. Ask it to close too, so launchUpdateScript's
+			// wait-for-no-running-instances doesn't just sit there
+			// retrying "Access is denied" until it gives up.
+			if hwnd := findSettingsWindowHandle(); hwnd != 0 {
+				procPostMessage.Call(hwnd, wmClose, 0, 0)
+			}
 			runtime.Quit(ctx)
 		}()
 	})
@@ -895,7 +940,10 @@ var (
 	procGetWindowLong       = user32.NewProc("GetWindowLongW")
 	procSetWindowLong       = user32.NewProc("SetWindowLongW")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	procPostMessage         = user32.NewProc("PostMessageW")
 )
+
+const wmClose = 0x0010
 
 const (
 	wsExToolWindow = 0x80

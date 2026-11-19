@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.7 — 2026-11-19
+
+### Sửa lỗi
+- Cài cập nhật có lúc không thay được file thật (bị kẹt do antivirus quét file mới tải xong), mở lại app cũ mà không báo lỗi. Giờ tự thử lại vài lần, có log để kiểm tra khi cần.
+
 ## 1.1.6 — 2026-11-19
 
 ### Thay đổi
