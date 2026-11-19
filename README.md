@@ -1,19 +1,50 @@
-# README
+# Ancol-Ani
 
-## About
+Widget GIF/chữ ở góc màn hình cho Windows (Go + Wails), kèm trang settings local và một sync server có web portal để đồng bộ/chia sẻ GIF qua tài khoản.
 
-This is the official Wails Vanilla template.
+## Tính năng chính
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+- Widget hoạt ảnh (GIF) + chữ, luôn nổi trên cùng, không chặn click, tự định vị lại khi đổi màn hình/độ phân giải.
+- Chọn vị trí hiển thị (4 góc màn hình), đổi chữ, đổi GIF — tất cả qua trang settings local mở bằng cách phải chuột vào widget.
+- Bật/tắt khởi động cùng Windows.
+- Liên kết tài khoản (tùy chọn) để đồng bộ/chia sẻ GIF giữa các thiết bị qua sync server riêng.
+- Chỉ chạy một widget cùng lúc; cửa sổ settings mở trong WebView2 riêng, không phải trình duyệt.
+- Dữ liệu cá nhân (chữ, vị trí, port server) lưu mã hóa (AES-GCM) trên máy, server local chỉ nghe `127.0.0.1`.
 
-## Live Development
+Chi tiết kiến trúc, build, API, luồng liên kết tài khoản: xem [CLAUDE.md](CLAUDE.md) và [docs/DEV-NOTES.md](docs/DEV-NOTES.md).
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## Cấu trúc thư mục
 
-## Building
+| Thư mục | Là gì |
+|---|---|
+| repo root (`app.go`, `main.go`) | App desktop Wails: widget + server local |
+| `frontend/` | UI widget (GIF + chữ) |
+| `web/` | Trang settings local — Vue 3 |
+| `cmd/syncserver/` | Sync server Go (đồng bộ/chia sẻ GIF qua tài khoản) |
+| `cmd/syncserver/portal/` | Web portal của sync server — Vue 3 |
+| `ui/` | Thiết kế dùng chung giữa `web/` và `portal/` |
 
-To build a redistributable, production mode package, use `wails build`.
+## Phát triển
+
+Máy dev đặt `NODE_ENV=production` thì cần cài bằng `npm ci --include=dev` (hoặc `npm install --include=dev`) cho cả `web/`, `frontend/` và `cmd/syncserver/portal/`.
+
+```sh
+# App desktop
+cd web && npm run build
+cd ../frontend && npm run build
+wails build -s   # -s vì Wails tự cài npm sẽ thiếu vite
+
+# Sync server
+cd cmd/syncserver/portal && npm run build
+go run ./cmd/syncserver
+```
+
+Build xong, khôi phục file Wails tự sửa: `git checkout -- go.mod frontend/package.json.md5 frontend/wailsjs`.
+
+## Build
+
+Build bản production: `wails build`. Exe nằm ở `build/bin/ancol-ani.exe`, nhúng sẵn toàn bộ UI (`go:embed`) — chỉ cần gửi đúng 1 file exe, máy nhận cần có Microsoft Edge WebView2 Runtime (có sẵn trên hầu hết Windows 10/11).
+
+## Phiên bản & changelog
+
+Xem [CHANGELOG.md](CHANGELOG.md), hoặc trong app: phải chuột vào widget → Cài đặt → trang **Về Ancol-Ani**.
