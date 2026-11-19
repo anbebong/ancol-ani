@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { confirmDialog } from '@ui/modal.js';
@@ -7,6 +7,31 @@ import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
 import { account, serverApi } from '../account.js';
 import { toast, toastError } from '../toast.js';
+
+// ---------- widget screen corner ----------
+const CORNERS = [
+    { id: 'tl', labelKey: 'positionTL' },
+    { id: 'tr', labelKey: 'positionTR' },
+    { id: 'bl', labelKey: 'positionBL' },
+    { id: 'br', labelKey: 'positionBR' },
+];
+const corner = ref('br');
+onMounted(async () => {
+    try {
+        corner.value = (await (await fetch('/position')).text()).trim() || 'br';
+    } catch (_) {}
+});
+async function setCorner(c) {
+    if (c === corner.value) return;
+    const form = new FormData();
+    form.append('corner', c);
+    try {
+        await fetch('/position', { method: 'POST', body: form });
+        corner.value = c;
+    } catch (err) {
+        toastError(err);
+    }
+}
 
 // ---------- text on the widget ----------
 const text = ref('');
@@ -93,14 +118,40 @@ async function pushCurrent() {
   <div class="flex flex-col gap-6">
     <PageHeader icon="monitor" :title="t('widgetTitle')" :subtitle="t('subtitle')"/>
 
-    <!-- Text -->
+    <!-- Widget screen position + text -->
     <div class="card bg-base-100">
-      <form class="card-body gap-3" @submit.prevent="sendText">
-        <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
-        <p class="text-xs text-base-content/60 -mt-1">{{ t('textHint') }}</p>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input v-model="text" type="text" :placeholder="t('textPlaceholder')" class="input input-bordered auth-input flex-1 min-w-0" autofocus/>
-          <button type="submit" class="btn btn-primary">{{ t('textSubmit') }}</button>
+      <form class="card-body gap-4" @submit.prevent="sendText">
+        <div class="flex flex-col sm:flex-row gap-6">
+          <div class="flex flex-col gap-2 shrink-0">
+            <h2 class="font-bold flex items-center gap-2"><Icon name="monitor"/> {{ t('positionLabel') }}</h2>
+            <div class="flex flex-col items-center w-48 mt-1 shrink-0">
+              <div class="relative aspect-video w-full border-2 border-neutral rounded-md bg-base-200">
+                <button v-for="c in CORNERS" :key="c.id" type="button"
+                  class="absolute w-6 h-6 rounded-full border-2 transition-colors"
+                  :class="[
+                    c.id === 'tl' ? 'top-1 left-1' : '',
+                    c.id === 'tr' ? 'top-1 right-1' : '',
+                    c.id === 'bl' ? 'bottom-1 left-1' : '',
+                    c.id === 'br' ? 'bottom-1 right-1' : '',
+                    corner === c.id ? 'bg-primary border-primary' : 'bg-base-100 border-neutral hover:border-primary',
+                  ]"
+                  :aria-label="t(c.labelKey)"
+                  :title="t(c.labelKey)"
+                  @click="setCorner(c.id)">
+                </button>
+              </div>
+              <div class="w-10 h-2 border-x-2 border-b-2 border-neutral rounded-b-sm"></div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2 flex-1 min-w-0">
+            <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
+            <p class="text-xs text-base-content/60">{{ t('textHint') }}</p>
+            <div class="flex gap-2 mt-1">
+              <input v-model="text" type="text" :placeholder="t('textPlaceholder')" class="input input-bordered input-lg auth-input flex-1 min-w-0" autofocus/>
+              <button type="submit" class="btn btn-primary btn-lg">{{ t('textSubmit') }}</button>
+            </div>
+          </div>
         </div>
       </form>
     </div>

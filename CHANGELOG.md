@@ -6,6 +6,15 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Có g�
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Có gì mới** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.2 — 2026-11-19
+
+### Thay đổi
+- Làm lại khối chọn vị trí widget trên trang **Widget**: mô phỏng màn hình rõ hơn, gộp cùng hàng với ô nhập chữ hiển thị thay vì tách rời.
+- Đổi nhãn "Widget" (menu, tiêu đề trang) tiếng Việt thành "Hoạt ảnh".
+
+### Sửa lỗi / nội bộ
+- Gộp 2 file dữ liệu `custom-text.txt` và `position.txt` thành một file `settings.data` duy nhất, mã hóa AES-GCM (trước đây lưu dạng chữ thường, đọc được trực tiếp).
+
 ## 1.1.0 — 2026-11-19
 
 ### Mới

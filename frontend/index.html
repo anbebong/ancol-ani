@@ -76,24 +76,36 @@
     </style>
 </head>
 <body>
-<div id="text-panel"><div id="text-bubble"><span id="text-content">Hi!</span></div></div>
+<div id="text-panel"><div id="text-bubble"><span id="text-content">Ancol Hello</span></div></div>
 <canvas id="stage"></canvas>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
 
-    window.runtime.EventsOn('server-text', (text) => {
+    function setText(text) {
         const value = (text || '').trim();
         document.getElementById('text-content').textContent = value;
         // No bubble at all for empty text instead of an empty box.
         document.getElementById('text-bubble').classList.toggle('is-empty', !value);
-    });
+    }
+
+    window.runtime.EventsOn('server-text', setText);
+
+    // This page is served by Wails on its own origin, not by the Go local
+    // server, so fetches to it need an absolute URL. The port comes from
+    // Go (app.go's LocalPort, bound via main.go) instead of being
+    // hardcoded here too - change clientLocalPort in one place.
+    const base = 'http://localhost:' + await window.go.main.App.LocalPort();
+
+    // GET /text persists across restarts (app.go), so load whatever was
+    // last set instead of always showing the hardcoded default above.
+    fetch(base + '/text', { cache: 'no-store' }).then((r) => r.text()).then(setText).catch(() => {});
 
     const canvas = document.getElementById('stage');
     let stopCurrent = null;
 
     function reload() {
         if (stopCurrent) stopCurrent();
-        stopCurrent = playGif(canvas, 'http://localhost:8788/gif?t=' + Date.now());
+        stopCurrent = playGif(canvas, base + '/gif?t=' + Date.now());
     }
 
     window.runtime.EventsOn('gif-changed', reload);

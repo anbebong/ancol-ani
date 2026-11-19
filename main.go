@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"os"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -48,6 +49,11 @@ func main() {
 			WindowIsTranslucent:               true,
 			DisableFramelessWindowDecorations: true,
 			WebviewGpuIsDisabled:              false,
+			// Left unset, WebView2 defaults to a folder named after the
+			// exe (including ".exe") for its own cache/cookies/local
+			// storage - a second, oddly-named sibling next to our own
+			// appDataDir() ("ancol-ani"). Put it under that instead.
+			WebviewUserDataPath: filepath.Join(appDataDir(), "webview2"),
 		},
 	})
 
