@@ -108,10 +108,6 @@ func main() {
 	mux.HandleFunc("/admin/users/", s.withCORS(s.requireAdmin(s.dispatchAdminUsersSub)))
 	mux.HandleFunc("/admin/public/", s.withCORS(s.requireAdmin(s.handleAdminUnpublish)))
 
-	// Public, read-only - the desktop app's "Kiểm tra cập nhật" button.
-	mux.HandleFunc("/latest-version", s.withCORS(s.handleLatestVersion))
-	mux.HandleFunc("/download/ancol-ani.exe", s.withCORS(s.handleDownloadLatest))
-
 	log.Printf("syncserver listening on %s (driver=%s)", addr, driver)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }

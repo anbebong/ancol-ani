@@ -38,9 +38,7 @@ async function checkForUpdate() {
         );
         if (!ok) return;
 
-        const form = new FormData();
-        form.append('sha256', data.sha256);
-        const applyRes = await fetch('/apply-update', { method: 'POST', body: form });
+        const applyRes = await fetch('/apply-update', { method: 'POST' });
         if (!applyRes.ok) {
             toast('Cập nhật lỗi: ' + (await applyRes.text()), 'error');
             return;

@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.6 — 2026-11-19
+
+### Thay đổi
+- Nguồn kiểm tra cập nhật đổi từ server riêng sang GitHub Releases của repo (đơn giản hơn, không cần tự host).
+
 ## 1.1.5 — 2026-11-19
 
 ### Mới

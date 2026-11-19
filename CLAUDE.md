@@ -48,9 +48,9 @@ Phát hành app desktop: sửa cùng lúc `VERSION`, `wails.json` (`info.product
 
 ## Cập nhật app (tự cập nhật)
 
-Trang **Về Ancol-Ani** có nút "Kiểm tra cập nhật" — chỉ chạy khi người dùng tự bấm, không tự động/định kỳ. App gọi `/check-update` local (`app.go`), cái đó gọi `GET {updateServerBase}/latest-version` trên sync server công khai; có bản mới thì hỏi xác nhận rồi `POST /apply-update` tải exe mới, kiểm `sha256`, tự thay file + khởi động lại (qua file `.bat` tạm chờ process cũ thoát).
+Trang **Về Ancol-Ani** có nút "Kiểm tra cập nhật" — chỉ chạy khi người dùng tự bấm, không tự động/định kỳ. App gọi `/check-update` local (`app.go`), cái đó gọi GitHub Releases API công khai (`api.github.com/repos/anbebong/ancol-ani/releases/latest`, không cần token vì repo public) để lấy tag mới nhất + link file đính kèm tên đúng `ancol-ani.exe`. Có bản mới thì hỏi xác nhận rồi `POST /apply-update` tải thẳng file đó (tin cậy qua HTTPS của GitHub, không có checksum riêng để verify), tự thay file + khởi động lại (qua file `.bat` tạm chờ process cũ thoát).
 
-**Publish 1 bản mới là thao tác tay** (không có upload API, không CI): sau khi build xong `ancol-ani.exe`, copy đè vào `data/releases/ancol-ani.exe` trên server (`cmd/syncserver/update.go` serve tĩnh từ đó), rồi ghi/`sửa data/releases/latest.json` dạng `{"version":"x.y.z","sha256":"<sha256 của file exe đó>","notes":"..."}`. Thiếu `latest.json` thì nút "Kiểm tra cập nhật" chỉ báo lỗi, không crash app.
+**Publish 1 bản mới**: tạo Git tag đúng số version trong `VERSION` (có hay không tiền tố `v` đều được, app tự bỏ `v` khi so sánh), rồi tạo **GitHub Release** từ tag đó (web UI hoặc `gh release create`), đính kèm file build `build/bin/ancol-ani.exe` **phải đặt tên đúng `ancol-ani.exe`** (khớp `githubReleaseAsset` trong `app.go`) — sai tên thì nút cập nhật báo lỗi "release không có file đính kèm". Chưa có release nào thì nút chỉ báo lỗi, không crash app.
 
 ## Icon
 

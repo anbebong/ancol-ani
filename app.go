@@ -6,9 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image/gif"
@@ -73,39 +71,71 @@ var rawVersion string
 
 var appVersion = strings.TrimSpace(rawVersion)
 
-// updateServerBase is the same public sync server already used for
-// account linking/GIF sharing (see CLAUDE.md) - /latest-version and
-// /download/ancol-ani.exe (cmd/syncserver/update.go) are two public,
-// read-only routes on it, publishing a release there is a manual step
-// (copy the exe + write latest.json), not something this app does.
-const updateServerBase = "https://game.anbebong.io.vn"
+// githubRepo is checked via GitHub's own public Releases API instead of
+// a self-hosted endpoint - the repo is already public there, so this
+// needs no server of ours at all. Publishing a release is the normal
+// "git tag + gh release create / GitHub's UI", attaching a build named
+// exactly githubReleaseAsset - nothing in this app's own infra to keep
+// in sync.
+const githubRepo = "anbebong/ancol-ani"
+const githubReleaseAsset = "ancol-ani.exe"
 
-// latestVersionInfo mirrors latest.json's shape on the server.
-type latestVersionInfo struct {
-	Version string `json:"version"`
-	SHA256  string `json:"sha256"`
-	Notes   string `json:"notes"`
+// githubRelease mirrors the fields this app needs from GitHub's release
+// JSON (GET https://api.github.com/repos/{repo}/releases/latest).
+type githubRelease struct {
+	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
 }
 
-// fetchLatestVersion calls the server's /latest-version. Network/parse
+// version strips a possible leading "v" from a git tag ("v1.1.5" or
+// "1.1.5" both compare fine against VERSION's bare "1.1.5").
+func (r *githubRelease) version() string {
+	return strings.TrimPrefix(r.TagName, "v")
+}
+
+// downloadURL finds the release asset literally named githubReleaseAsset
+// among whatever files were attached to the release.
+func (r *githubRelease) downloadURL() (string, error) {
+	for _, a := range r.Assets {
+		if a.Name == githubReleaseAsset {
+			return a.BrowserDownloadURL, nil
+		}
+	}
+	return "", fmt.Errorf("release không có file %s đính kèm", githubReleaseAsset)
+}
+
+// fetchLatestRelease calls GitHub's public Releases API. Network/parse
 // errors are returned as-is so the HTTP handler can surface something
-// useful ("server unreachable" vs "no release published yet" etc) rather
-// than a generic failure.
-func fetchLatestVersion() (*latestVersionInfo, error) {
-	resp, err := http.Get(updateServerBase + "/latest-version")
+// useful ("no internet" vs "no release published yet" etc) rather than a
+// generic failure. GitHub's API requires a User-Agent header on every
+// request or it responds 403, hence the manual http.Request instead of
+// a plain http.Get.
+func fetchLatestRelease() (*githubRelease, error) {
+	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos/"+githubRepo+"/releases/latest", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "ancol-ani-updater")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server trả về %d", resp.StatusCode)
+		return nil, fmt.Errorf("GitHub trả về %d", resp.StatusCode)
 	}
 
-	var info latestVersionInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+	var rel githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return nil, err
 	}
-	return &info, nil
+	return &rel, nil
 }
 
 // isNewerVersion compares two "x.y.z" strings component by component
@@ -130,26 +160,28 @@ func isNewerVersion(candidate, current string) bool {
 	return false
 }
 
-// applyUpdate downloads the new exe, verifies it against expectedSHA256,
-// and - only once verified - arranges for it to replace this exe and
-// relaunch. It never touches the real exe path directly: Windows won't
-// let another process overwrite a running exe's bytes in place, but it
-// does allow renaming the running exe out of the way, which is what the
-// generated batch script does after this process has fully exited (so
-// the file is no longer open for execution).
-func applyUpdate(expectedSHA256 string) error {
+// applyUpdate downloads the new exe straight from GitHub's release asset
+// URL (HTTPS to github.com/objects.githubusercontent.com is the only
+// integrity check here - GitHub's API gives no checksum to verify
+// against) and arranges for it to replace this exe and relaunch. It
+// never touches the real exe path directly: Windows won't let another
+// process overwrite a running exe's bytes in place, but it does allow
+// renaming the running exe out of the way, which is what the generated
+// batch script does after this process has fully exited (so the file is
+// no longer open for execution).
+func applyUpdate(downloadURL string) error {
 	exePath, err := os.Executable()
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Get(updateServerBase + "/download/ancol-ani.exe")
+	resp, err := http.Get(downloadURL)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server trả về %d", resp.StatusCode)
+		return fmt.Errorf("tải bản mới lỗi, GitHub trả về %d", resp.StatusCode)
 	}
 
 	newExePath := exePath + ".new"
@@ -157,18 +189,11 @@ func applyUpdate(expectedSHA256 string) error {
 	if err != nil {
 		return err
 	}
-	hasher := sha256.New()
-	_, copyErr := io.Copy(io.MultiWriter(out, hasher), resp.Body)
+	_, copyErr := io.Copy(out, resp.Body)
 	out.Close()
 	if copyErr != nil {
 		os.Remove(newExePath)
 		return copyErr
-	}
-
-	actualSHA256 := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(actualSHA256, expectedSHA256) {
-		os.Remove(newExePath)
-		return fmt.Errorf("file tải về không khớp checksum, có thể bị lỗi khi tải")
 	}
 
 	return launchUpdateScript(exePath, newExePath)
@@ -604,16 +629,15 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 
 	mux.HandleFunc("/check-update", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		info, err := fetchLatestVersion()
+		rel, err := fetchLatestRelease()
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{
-			"hasUpdate": isNewerVersion(info.Version, appVersion),
-			"version":   info.Version,
-			"sha256":    info.SHA256,
-			"notes":     info.Notes,
+			"hasUpdate": isNewerVersion(rel.version(), appVersion),
+			"version":   rel.version(),
+			"notes":     rel.Body,
 		})
 	})
 
@@ -623,13 +647,17 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 			return
 		}
 
-		sha := strings.TrimSpace(r.FormValue("sha256"))
-		if sha == "" {
-			http.Error(w, "missing sha256", http.StatusBadRequest)
+		rel, err := fetchLatestRelease()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		if err := applyUpdate(sha); err != nil {
+		url, err := rel.downloadURL()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := applyUpdate(url); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
