@@ -25,6 +25,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 )
 
 // The web portal (accounts, GIF management, admin, public gallery) is its
@@ -50,6 +52,7 @@ func main() {
 	secret := envOr("JWT_SECRET", "")
 
 	makeAdmin := flag.String("make-admin", "", "username to grant admin rights to, then exit")
+	setQuota := flag.String("set-quota", "", "username=N: set that user's GIF quota (0-50), then exit")
 	flag.Parse()
 
 	store, err := OpenStore(driver, dsn)
@@ -62,6 +65,25 @@ func main() {
 			log.Fatalf("cannot grant admin to %q: %v", *makeAdmin, err)
 		}
 		fmt.Printf("%q is now an admin\n", *makeAdmin)
+		return
+	}
+
+	// Same idea as -make-admin, for servers with no admin account yet (the
+	// portal's quota field needs one). Safe to run while the server is up.
+	if *setQuota != "" {
+		username, rawN, ok := strings.Cut(*setQuota, "=")
+		n, err := strconv.ParseInt(rawN, 10, 64)
+		if !ok || err != nil || n < 0 || n > 50 {
+			log.Fatalf("-set-quota expects username=N with N in 0-50, got %q", *setQuota)
+		}
+		user, err := store.GetUserByUsername(username)
+		if err != nil {
+			log.Fatalf("cannot find user %q: %v", username, err)
+		}
+		if err := store.SetGifQuota(user.ID, n); err != nil {
+			log.Fatalf("cannot set quota for %q: %v", username, err)
+		}
+		fmt.Printf("%q quota: %d -> %d\n", username, user.GifQuota, n)
 		return
 	}
 

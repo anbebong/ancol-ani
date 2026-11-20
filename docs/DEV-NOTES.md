@@ -94,7 +94,7 @@ wails build -s        # -s = skip frontend build
 | GET/DELETE/PATCH | `/admin/users...` | admin | list, xoá user, sửa quota |
 | DELETE | `/admin/public/{slug}` | admin | gỡ public bất kỳ |
 
-Admin đầu tiên set bằng CLI: `syncserver.exe -make-admin <username>` (không có API tự nâng quyền).
+Admin đầu tiên set bằng CLI: `syncserver.exe -make-admin <username>` (không có API tự nâng quyền). Sửa quota không cần admin: `syncserver.exe -set-quota <username>=<N>` (0–50). Cả hai sửa thẳng DB rồi thoát, chạy được khi server đang chạy.
 
 ## 5. Luồng liên kết client ↔ server (web local ↔ syncserver)
 
@@ -178,6 +178,7 @@ Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mo
 | Log | `~/dinorace-tunnel.log` (gộp cả 3) |
 
 - Cấp quyền admin trên production: đăng ký tài khoản trên portal, rồi chạy `ssh -p 8022 u0_a249@192.168.0.105 "cd ~/ancolani && ./ancolani-sync-arm64 -make-admin <username>"`.
+- Sửa quota trên production khi chưa có admin: lệnh trên với `-set-quota <username>=<N>` thay cho `-make-admin`. Nhớ đặt `DB_DSN="file:data/ancol-ani.db?_pragma=busy_timeout(5000)"` giống `run.sh`. Sao lưu DB trước (`cp data/ancol-ani.db data/ancol-ani.db.bak-<ngày>`).
 - **Quay lại dino-race:** chạy `bash deploy/deploy-arm.sh` trong repo dino-race. Script đó ghi đè lại `~/run.sh` bản dino-race; dữ liệu dino-race (`~/server`, `~/users.json`, `~/admin.json`) vẫn còn nguyên. Bản `run.sh` dino-race cũ cũng được lưu ở `~/run.sh.dinorace-backup`.
 - Ngược lại: **đừng chạy `deploy-arm.sh` của dino-race** nếu muốn giữ Ancol-Ani, vì nó sẽ đưa dino-race trở lại cổng 7879.
 - `deploy/phone/maintenance-on.sh` là bản của repo này: giống bản dino-race nhưng kill thêm `ancolani-sync-arm64`.
