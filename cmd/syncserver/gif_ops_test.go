@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/gif"
+	"testing"
+)
 
 func TestResizeGIF_Basic(t *testing.T) {
 	g := makeTestGIF(t, 3, 300, 300)
@@ -212,5 +218,65 @@ func TestSpeedGIF_ClampsToMinimumDelay(t *testing.T) {
 	}
 	if out.Delay[0] < 2 {
 		t.Fatalf("delay below GIF minimum: %d", out.Delay[0])
+	}
+}
+
+// makeColorfulTestGIF builds frames with a full 256-entry palette and a
+// non-repeating pixel pattern, so the frames actually need the full palette
+// width (8 bits/pixel code) to encode. makeTestGIF's fixture only ever uses 2
+// palette entries, so palette reduction cannot shrink it further (GIF already
+// picks the minimum code size for a 2-color palette); this fixture gives
+// optimizeGIF real color variation to reduce.
+func makeColorfulTestGIF(t *testing.T, frames int, w, h int) *gif.GIF {
+	t.Helper()
+	pal := make(color.Palette, 0, 256)
+	for r := 0; r < 8; r++ {
+		for g := 0; g < 8; g++ {
+			for b := 0; b < 4; b++ {
+				pal = append(pal, color.RGBA{R: uint8(r * 36), G: uint8(g * 36), B: uint8(b * 85), A: 255})
+			}
+		}
+	}
+	anim := &gif.GIF{Config: image.Config{Width: w, Height: h, ColorModel: pal}}
+	for i := 0; i < frames; i++ {
+		img := image.NewPaletted(image.Rect(0, 0, w, h), pal)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				idx := (x + y + i) % len(pal)
+				img.SetColorIndex(x, y, uint8(idx))
+			}
+		}
+		anim.Image = append(anim.Image, img)
+		anim.Delay = append(anim.Delay, 10)
+	}
+	return anim
+}
+
+func TestOptimizeGIF_ReducesEncodedSize(t *testing.T) {
+	g := makeColorfulTestGIF(t, 5, 200, 200)
+	var before bytes.Buffer
+	if err := gif.EncodeAll(&before, g); err != nil {
+		t.Fatal(err)
+	}
+	out, err := optimizeGIF(g, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after bytes.Buffer
+	if err := gif.EncodeAll(&after, out); err != nil {
+		t.Fatal(err)
+	}
+	if after.Len() >= before.Len() {
+		t.Fatalf("optimize did not shrink: before=%d after=%d", before.Len(), after.Len())
+	}
+}
+
+func TestOptimizeGIF_RejectsInvalidLevel(t *testing.T) {
+	g := makeTestGIF(t, 1, 50, 50)
+	if _, err := optimizeGIF(g, 0); err == nil {
+		t.Fatal("want error for level=0")
+	}
+	if _, err := optimizeGIF(g, 4); err == nil {
+		t.Fatal("want error for level=4")
 	}
 }

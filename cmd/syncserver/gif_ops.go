@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/gif"
 	"math"
+	"sort"
 )
 
 // resizeGIF returns a copy of g with every frame scaled to width x height
@@ -123,6 +126,79 @@ func speedGIF(g *gif.GIF, factor float64) (*gif.GIF, error) {
 		out.Delay[i] = nd
 	}
 	return out, nil
+}
+
+// optimizeGIF returns a copy of g with every frame's palette reduced to cut
+// encoded size. level must be 1 (light), 2 (medium) or 3 (aggressive),
+// mapping to a target palette size of 128, 64 or 32 colors respectively.
+// Fewer palette entries let the GIF encoder use a narrower LZW code size
+// (image/gif picks ceil(log2(len(palette))) bits per pixel code), which is
+// what actually shrinks the output; this only pays off for frames whose
+// palette already exceeds the target. Each frame's reduced palette is built
+// by sorting its existing palette by luma and sampling it at even intervals
+// (a simple uniform quantization, not full median-cut), then every pixel is
+// re-mapped to its nearest color in that smaller palette via
+// image/draw.Draw with draw.Src onto a fresh *image.Paletted. This keeps the
+// dependency footprint to the standard library only.
+func optimizeGIF(g *gif.GIF, level int) (*gif.GIF, error) {
+	var target int
+	switch level {
+	case 1:
+		target = 128
+	case 2:
+		target = 64
+	case 3:
+		target = 32
+	default:
+		return nil, fmt.Errorf("muc do toi uu khong hop le: %d (chi nhan 1, 2, 3)", level)
+	}
+
+	out := &gif.GIF{
+		Image:           make([]*image.Paletted, len(g.Image)),
+		Delay:           append([]int(nil), g.Delay...),
+		LoopCount:       g.LoopCount,
+		Disposal:        append([]byte(nil), g.Disposal...),
+		BackgroundIndex: g.BackgroundIndex,
+		Config:          g.Config,
+	}
+
+	for i, frame := range g.Image {
+		pal := reducePalette(frame.Palette, target)
+		dst := image.NewPaletted(frame.Bounds(), pal)
+		draw.Draw(dst, dst.Bounds(), frame, frame.Bounds().Min, draw.Src)
+		out.Image[i] = dst
+	}
+	return out, nil
+}
+
+// reducePalette returns a palette of at most target colors derived from src.
+// If src already fits within target, it is returned unchanged. Otherwise src
+// is sorted by approximate luma and sampled at even intervals across that
+// sorted order, giving a deterministic, stdlib-only approximation of palette
+// reduction without pulling in a quantization library.
+func reducePalette(src color.Palette, target int) color.Palette {
+	if len(src) <= target {
+		return append(color.Palette(nil), src...)
+	}
+
+	sorted := append(color.Palette(nil), src...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return luma(sorted[i]) < luma(sorted[j])
+	})
+
+	pal := make(color.Palette, target)
+	for i := 0; i < target; i++ {
+		idx := i * (len(sorted) - 1) / (target - 1)
+		pal[i] = sorted[idx]
+	}
+	return pal
+}
+
+// luma returns an approximate perceptual brightness of c, used only to order
+// colors before sampling in reducePalette.
+func luma(c color.Color) int {
+	r, g, b, _ := c.RGBA()
+	return int(r)*299/1000 + int(g)*587/1000 + int(b)*114/1000
 }
 
 // scalePaletted nearest-neighbor scales src to width x height. Pixels are
