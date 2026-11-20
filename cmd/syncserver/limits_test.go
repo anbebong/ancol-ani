@@ -13,6 +13,11 @@ func TestToolSlotPool_LimitsConcurrency(t *testing.T) {
 			t.Fatalf("acquire %d: %v", i, err)
 		}
 	}
+	t.Cleanup(func() {
+		for i := 0; i < maxConcurrentToolJobs; i++ {
+			releaseToolSlot()
+		}
+	})
 	cctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	if err := acquireToolSlot(cctx); err == nil {
