@@ -5,13 +5,13 @@ import Icon from '@ui/components/Icon.vue';
 const tools = [
     { to: '/tools/convert', icon: 'images', title: 'Chuyển đổi thành GIF', desc: 'Từ video, một ảnh, hoặc nhiều ảnh.', ready: true },
     { to: '/tools/resize', icon: 'image', title: 'Resize GIF', desc: 'Đổi kích thước GIF theo pixel.', ready: true },
-    { icon: 'square', title: 'Crop GIF', desc: 'Cắt một vùng của GIF.', ready: false },
-    { icon: 'sparkles', title: 'Optimize GIF', desc: 'Giảm dung lượng GIF.', ready: false },
-    { icon: 'rotate-ccw', title: 'Rotate GIF', desc: 'Xoay hoặc lật GIF.', ready: false },
-    { icon: 'history', title: 'Reverse GIF', desc: 'Đảo ngược thứ tự khung hình.', ready: false },
-    { icon: 'wand-2', title: 'Speed GIF', desc: 'Tăng/giảm tốc độ GIF.', ready: false },
-    { icon: 'images', title: 'Split GIF', desc: 'Tách GIF thành từng khung hình.', ready: false },
-    { icon: 'type', title: 'Caption GIF', desc: 'Thêm chữ vào GIF.', ready: false },
+    { to: '/tools/crop', icon: 'square', title: 'Crop GIF', desc: 'Cắt một vùng của GIF.', ready: true },
+    { to: '/tools/optimize', icon: 'sparkles', title: 'Optimize GIF', desc: 'Giảm dung lượng GIF.', ready: true },
+    { to: '/tools/rotate', icon: 'rotate-ccw', title: 'Rotate GIF', desc: 'Xoay hoặc lật GIF.', ready: true },
+    { to: '/tools/reverse', icon: 'history', title: 'Reverse GIF', desc: 'Đảo ngược thứ tự khung hình.', ready: true },
+    { to: '/tools/speed', icon: 'wand-2', title: 'Speed GIF', desc: 'Tăng/giảm tốc độ GIF.', ready: true },
+    { to: '/tools/split', icon: 'images', title: 'Split GIF', desc: 'Tách GIF thành từng khung hình.', ready: true },
+    { to: '/tools/caption', icon: 'type', title: 'Caption GIF', desc: 'Thêm chữ vào GIF.', ready: true },
 ];
 </script>
 
