@@ -128,7 +128,7 @@ func fetchLatestRelease() (*githubRelease, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub trả về %d", resp.StatusCode)
+		return nil, fmt.Errorf("server trả về %d", resp.StatusCode)
 	}
 
 	var rel githubRelease
@@ -181,7 +181,7 @@ func applyUpdate(downloadURL string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("tải bản mới lỗi, GitHub trả về %d", resp.StatusCode)
+		return fmt.Errorf("tải bản mới lỗi, server trả về %d", resp.StatusCode)
 	}
 
 	newExePath := exePath + ".new"
@@ -327,7 +327,7 @@ func settingsPath() string {
 
 const defaultCorner = "br"
 
-var validCorners = map[string]bool{"br": true, "bl": true, "tr": true, "tl": true}
+var validCorners = map[string]bool{"br": true, "bl": true, "tr": true, "tl": true, "tc": true, "bc": true}
 
 type widgetSettings struct {
 	Corner string `json:"corner"`
@@ -855,6 +855,10 @@ func positionWidget(hwnd uintptr) {
 		x, y = work.Right-w-m, work.Top+m
 	case "tl":
 		x, y = work.Left+m, work.Top+m
+	case "tc":
+		x, y = work.Left+(work.Right-work.Left-w)/2, work.Top+m
+	case "bc":
+		x, y = work.Left+(work.Right-work.Left-w)/2, work.Bottom-h-m
 	default: // "br"
 		x, y = work.Right-w-m, work.Bottom-h-m
 	}

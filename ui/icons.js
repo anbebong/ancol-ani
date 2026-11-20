@@ -34,6 +34,7 @@ import tag from 'lucide-static/icons/tag.svg?raw';
 import square from 'lucide-static/icons/square.svg?raw';
 import power from 'lucide-static/icons/power.svg?raw';
 import github from 'lucide-static/icons/github.svg?raw';
+import x from 'lucide-static/icons/x.svg?raw';
 
 // Raw lucide SVG markup by name, rendered through <Icon name="..."/>.
 // Shared by the server portal and the client's local settings page.
@@ -45,5 +46,5 @@ export const ICONS = {
     'share-2': share2, eye, 'eye-off': eyeOff, crown, users, user, 'user-plus': userPlus,
     check, minus, key, lock, 'trash-2': trash2, history, compass, shield, search,
     type, link, unlink, 'rotate-ccw': rotateCcw, monitor, languages,
-    'external-link': externalLink, server, sparkles, tag, square, power, github,
+    'external-link': externalLink, server, sparkles, tag, square, power, github, x,
 };

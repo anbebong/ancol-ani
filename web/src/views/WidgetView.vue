@@ -29,8 +29,10 @@ async function setAutoStart(enabled) {
 // ---------- widget screen corner ----------
 const CORNERS = [
     { id: 'tl', labelKey: 'positionTL' },
+    { id: 'tc', labelKey: 'positionTC' },
     { id: 'tr', labelKey: 'positionTR' },
     { id: 'bl', labelKey: 'positionBL' },
+    { id: 'bc', labelKey: 'positionBC' },
     { id: 'br', labelKey: 'positionBR' },
 ];
 const corner = ref('br');
@@ -68,7 +70,10 @@ async function sendText() {
 
 // ---------- GIF on the widget ----------
 const previewKey = ref(String(Date.now()));
-const loadPreview = () => fetch('/gif?t=' + previewKey.value, { cache: 'no-store' }).then((r) => r.arrayBuffer());
+// While a file is picked but not applied yet, preview it directly from
+// disk (not what the widget is currently showing) so the preview matches
+// what "Áp dụng" is actually about to upload.
+const loadPreview = () => (chosen.value ? chosen.value.arrayBuffer() : fetch('/gif?t=' + previewKey.value, { cache: 'no-store' }).then((r) => r.arrayBuffer()));
 function reloadPreview() { previewKey.value = String(Date.now()); }
 
 const fileInput = ref(null);
@@ -83,6 +88,7 @@ function pick(file) {
         return;
     }
     chosen.value = file;
+    previewKey.value = 'local:' + file.name + ':' + file.lastModified + ':' + file.size;
 }
 function onDrop(e) {
     dragOver.value = false;
@@ -107,6 +113,12 @@ async function apply() {
     } finally {
         busy.value = false;
     }
+}
+
+function cancelPick() {
+    chosen.value = null;
+    if (fileInput.value) fileInput.value.value = '';
+    reloadPreview();
 }
 
 async function reset() {
@@ -148,8 +160,10 @@ async function pushCurrent() {
                   class="absolute w-6 h-6 rounded-full border-2 transition-colors"
                   :class="[
                     c.id === 'tl' ? 'top-1 left-1' : '',
+                    c.id === 'tc' ? 'top-1 left-1/2 -translate-x-1/2' : '',
                     c.id === 'tr' ? 'top-1 right-1' : '',
                     c.id === 'bl' ? 'bottom-1 left-1' : '',
+                    c.id === 'bc' ? 'bottom-1 left-1/2 -translate-x-1/2' : '',
                     c.id === 'br' ? 'bottom-1 right-1' : '',
                     corner === c.id ? 'bg-primary border-primary' : 'bg-base-100 border-neutral hover:border-primary',
                   ]"
@@ -157,19 +171,20 @@ async function pushCurrent() {
                   :title="t(c.labelKey)"
                   @click="setCorner(c.id)">
                 </button>
-                <label class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 cursor-pointer" :title="t('autoStartHint')">
-                  <span class="flex items-center gap-1 text-[10px] font-bold text-base-content/70">
-                    <Icon name="power" :size="12"/>
-                    {{ t('autoStartLabel') }}
-                  </span>
-                  <input type="checkbox" class="toggle toggle-primary toggle-sm" :checked="autoStart" @change="setAutoStart($event.target.checked)" :aria-label="t('autoStartLabel')"/>
-                </label>
               </div>
               <div class="w-10 h-2 border-x-2 border-b-2 border-neutral rounded-b-sm"></div>
             </div>
           </div>
 
           <div class="flex flex-col gap-2 flex-1 min-w-0">
+            <label class="flex items-center justify-between gap-3 cursor-pointer">
+              <span class="flex flex-col gap-1">
+                <h2 class="font-bold flex items-center gap-2"><Icon name="power"/> {{ t('autoStartLabel') }}</h2>
+                <p class="text-xs text-base-content/60">{{ t('autoStartHint') }}</p>
+              </span>
+              <input type="checkbox" class="toggle toggle-primary toggle-sm shrink-0" :checked="autoStart" @change="setAutoStart($event.target.checked)" :aria-label="t('autoStartLabel')"/>
+            </label>
+
             <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
             <p class="text-xs text-base-content/60">{{ t('textHint') }}</p>
             <div class="flex gap-2 mt-1 items-start">
@@ -208,7 +223,10 @@ async function pushCurrent() {
                 <span v-if="busy" class="loading loading-spinner loading-sm"></span>
                 <Icon v-else name="check"/> {{ t('uploadSubmit') }}
               </button>
-              <button type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-1" @click="reset">
+              <button v-if="chosen" type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-1" :disabled="busy" @click="cancelPick">
+                <Icon name="x"/> {{ t('cancelPickBtn') }}
+              </button>
+              <button v-else type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-1" @click="reset">
                 <Icon name="rotate-ccw"/> {{ t('resetSubmit') }}
               </button>
             </div>
