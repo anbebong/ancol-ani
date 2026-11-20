@@ -12,6 +12,7 @@ const routes = [
     { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue'), meta: { auth: true, title: 'Lịch sử chia sẻ' } },
     { path: '/account', name: 'account', component: () => import('./views/AccountView.vue'), meta: { auth: true, title: 'Tài khoản' } },
     { path: '/gallery', name: 'gallery', component: () => import('./views/GalleryView.vue'), meta: { auth: true, title: 'Khám phá' } },
+    { path: '/tools', name: 'tools', component: () => import('./views/ToolsIndexView.vue'), meta: { title: 'Công cụ GIF' } },
     { path: '/tools/resize', name: 'tools-resize', component: () => import('./views/tools/ResizeView.vue'), meta: { title: 'Resize GIF' } },
     { path: '/tools/convert', name: 'tools-convert', component: () => import('./views/tools/ConvertView.vue'), meta: { title: 'Chuyển đổi thành GIF' } },
     { path: '/admin/users', name: 'admin-users', component: () => import('./views/AdminUsersView.vue'), meta: { auth: true, admin: true, title: 'Quản trị user' } },
