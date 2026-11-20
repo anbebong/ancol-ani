@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
+	"strings"
 	"testing"
 )
 
@@ -93,6 +95,42 @@ func TestProbeVideoDuration_RejectsMissingFile(t *testing.T) {
 	_, err := probeVideoDuration(context.Background(), "/no/such/file.mp4")
 	if err == nil {
 		t.Fatal("want error for missing file")
+	}
+}
+
+// --- I1: fps cap + scale filter ---
+
+func TestVideoToGIF_RejectsBadFPS(t *testing.T) {
+	// No ffmpeg/ffprobe call needed: the fps check runs before probing the
+	// video, so this must fail even for a nonexistent path.
+	if _, err := videoToGIF(context.Background(), "/no/such/file.mp4", 0); err == nil {
+		t.Fatal("want error for fps=0")
+	}
+	if _, err := videoToGIF(context.Background(), "/no/such/file.mp4", -1); err == nil {
+		t.Fatal("want error for fps<0")
+	}
+	if _, err := videoToGIF(context.Background(), "/no/such/file.mp4", maxVideoFPS+1); err == nil {
+		t.Fatal("want error for fps over maxVideoFPS")
+	}
+}
+
+func TestFfmpegGifArgs_IncludesFpsAndScaleFilter(t *testing.T) {
+	args := ffmpegGifArgs("in.mp4", 12)
+	var vf string
+	for i, a := range args {
+		if a == "-vf" && i+1 < len(args) {
+			vf = args[i+1]
+		}
+	}
+	if vf == "" {
+		t.Fatalf("no -vf argument found in %v", args)
+	}
+	if !strings.Contains(vf, "fps=12") {
+		t.Fatalf("-vf %q missing fps=12", vf)
+	}
+	wantScale := fmt.Sprintf("scale='min(iw\\,%d)'", maxGifSide)
+	if !strings.Contains(vf, wantScale) {
+		t.Fatalf("-vf %q missing scale filter using maxGifSide (%s)", vf, wantScale)
 	}
 }
 

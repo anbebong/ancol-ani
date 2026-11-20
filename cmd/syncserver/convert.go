@@ -116,11 +116,69 @@ func probeVideoDuration(ctx context.Context, path string) (time.Duration, error)
 	return time.Duration(secs * float64(time.Second)), nil
 }
 
+// maxVideoFPS caps the fps parameter accepted by videoToGIF. Anything
+// higher multiplies ffmpeg's output frame count (and so its CPU/RAM cost and
+// the resulting GIF size) for no real benefit at GIF-typical playback rates.
+const maxVideoFPS = 30
+
+// maxFfmpegOutputBytes bounds how much ffmpeg's stdout can buffer into
+// memory for the video->gif convert path (I1): without this, a pathological
+// input (or a disconnect that leaves ffmpeg running long) could grow an
+// unbounded in-memory buffer before checkGifSize ever gets a chance to
+// reject the result. Set well above maxGifBytes so a legitimately
+// not-quite-fitting GIF still surfaces as checkGifSize's own clear "too big"
+// error rather than this lower-level cutoff.
+const maxFfmpegOutputBytes = maxGifBytes * 4
+
+// ffmpegGifArgs builds the ffmpeg argument list for the video->gif convert
+// path. Split out from videoToGIF so the command (in particular the scale
+// filter) can be asserted on directly in tests without running ffmpeg.
+//
+// The -vf filter does two things:
+//   - fps=N samples the video at the requested rate.
+//   - scale clamps width to maxGifSide (preserving aspect ratio) so
+//     real-world video resolutions (720p/1080p, common on phones) don't
+//     get fully transcoded only to blow maxGifSide/maxGifTotalPixels
+//     afterward. "-2" keeps the scaled height even, which some codecs
+//     require.
+func ffmpegGifArgs(path string, fps int) []string {
+	vf := fmt.Sprintf("fps=%d,scale='min(iw\\,%d)':-2:flags=lanczos", fps, maxGifSide)
+	return []string{
+		"-i", path,
+		"-vf", vf,
+		"-f", "gif",
+		"-",
+	}
+}
+
+// limitedWriter is an io.Writer that errors (and, if set, calls kill) once
+// more than limit bytes have been written to it. Used to cap how much of
+// ffmpeg's stdout videoToGIF will buffer in memory (I1).
+type limitedWriter struct {
+	buf   bytes.Buffer
+	limit int64
+	kill  func()
+}
+
+func (lw *limitedWriter) Write(p []byte) (int, error) {
+	if int64(lw.buf.Len())+int64(len(p)) > lw.limit {
+		if lw.kill != nil {
+			lw.kill()
+		}
+		return 0, fmt.Errorf("dau ra ffmpeg vuot qua gioi han %d bytes", lw.limit)
+	}
+	return lw.buf.Write(p)
+}
+
 // videoToGIF transcodes the video at path into an animated GIF sampled at
-// fps frames per second. The video's duration is checked against
-// maxVideoDurationSec before ffmpeg is ever invoked, so an over-limit video
-// never reaches the transcode step.
+// fps frames per second. fps is capped at maxVideoFPS and the video's
+// duration is checked against maxVideoDurationSec before ffmpeg is ever
+// invoked, so an invalid request never reaches the transcode step.
 func videoToGIF(ctx context.Context, path string, fps int) ([]byte, error) {
+	if fps <= 0 || fps > maxVideoFPS {
+		return nil, fmt.Errorf("fps khong hop le: %d (chi nhan 1-%d)", fps, maxVideoFPS)
+	}
+
 	dur, err := probeVideoDuration(ctx, path)
 	if err != nil {
 		return nil, err
@@ -129,17 +187,18 @@ func videoToGIF(ctx context.Context, path string, fps int) ([]byte, error) {
 		return nil, fmt.Errorf("video qua dai: %.1fs (toi da %ds)", dur.Seconds(), maxVideoDurationSec)
 	}
 
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-i", path,
-		"-vf", fmt.Sprintf("fps=%d", fps),
-		"-f", "gif",
-		"-",
-	)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	cmd := exec.CommandContext(ctx, "ffmpeg", ffmpegGifArgs(path, fps)...)
+	out := &limitedWriter{limit: maxFfmpegOutputBytes}
+	var stderr bytes.Buffer
+	cmd.Stdout = out
 	cmd.Stderr = &stderr
+	out.kill = func() {
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+	}
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("chuyen doi video sang gif that bai: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
-	return stdout.Bytes(), nil
+	return out.buf.Bytes(), nil
 }

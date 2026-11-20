@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,9 +79,14 @@ func TestHandleToolResize_RejectsGifBomb(t *testing.T) {
 }
 
 func TestWithToolLimits_RejectsOverConcurrency(t *testing.T) {
+	// The slot is now acquired inside the handler (runWithToolSlot), around
+	// the processing step only - see I3. Simulate that explicitly here
+	// since withToolLimits itself no longer touches the pool.
 	slow := func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
+		runWithToolSlot(w, r, func() {
+			time.Sleep(200 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		})
 	}
 	wrapped := withToolLimits(slow)
 	results := make(chan int, maxConcurrentToolJobs+1)
@@ -317,5 +323,120 @@ func TestHandleToolConvert_MissingFile(t *testing.T) {
 	withToolLimits(handleToolConvert)(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status: %d want 400", w.Code)
+	}
+}
+
+// --- C1: multipart body cap + explicit temp-file cleanup ---
+
+func TestParseToolMultipart_CleansSpilledTempFiles(t *testing.T) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "big.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bigger than toolMultipartMemThreshold, so ParseMultipartForm spills
+	// the extra content to an on-disk temp file.
+	big := bytes.Repeat([]byte{0xAB}, int(toolMultipartMemThreshold)+(1<<16))
+	if _, err := fw.Write(big); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	bodyLen := buf.Len()
+
+	req := httptest.NewRequest("POST", "/x", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	before, _ := os.ReadDir(os.TempDir())
+	beforeNames := map[string]bool{}
+	for _, e := range before {
+		beforeNames[e.Name()] = true
+	}
+
+	cleanup, err := parseToolMultipart(req, int64(bodyLen)+4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanup()
+
+	after, _ := os.ReadDir(os.TempDir())
+	for _, e := range after {
+		if beforeNames[e.Name()] {
+			continue
+		}
+		if strings.HasPrefix(e.Name(), "multipart-") {
+			t.Fatalf("leftover multipart temp file after cleanup: %s", e.Name())
+		}
+	}
+}
+
+func TestParseToolMultipart_RejectsOverBodyCap(t *testing.T) {
+	body, ct := multipartGifRequest(t, "file", encodeTestGIF(t, 1, 50, 50))
+	req := httptest.NewRequest("POST", "/x", body)
+	req.Header.Set("Content-Type", ct)
+	cleanup, err := parseToolMultipart(req, 4) // way under the body's actual size
+	defer cleanup()
+	if err == nil {
+		t.Fatal("want error when body exceeds the MaxBytesReader cap")
+	}
+}
+
+// --- C2 / I4: image(s)->GIF convert rejects oversized/over-budget input
+// before decoding pixels ---
+
+func TestHandleConvertImages_RejectsOversizedDimensionsBeforeDecode(t *testing.T) {
+	// encodeTestPNG(maxGifSide+10, 10) already covers this via
+	// TestHandleToolConvert_OversizedImageRejected above; this test name
+	// documents explicitly which finding it proves (C2).
+	body, ct := multipartImageRequest(t, [][]byte{encodeTestPNG(t, maxGifSide+10, 10)})
+	req := httptest.NewRequest("POST", "/api/tools/convert", body)
+	req.Header.Set("Content-Type", ct)
+	w := httptest.NewRecorder()
+	withToolLimits(handleToolConvert)(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d want 400 body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleConvertImages_RejectsBatchPixelBudget(t *testing.T) {
+	// Each image is within maxGifSide on its own, but len(files)*w*h must
+	// also fit maxGifTotalPixels (I4) - use a frame size and count whose
+	// product clearly exceeds it.
+	w, h := maxGifSide, maxGifSide
+	count := maxGifTotalPixels/(w*h) + 2
+	if count > maxImagesCount {
+		count = maxImagesCount
+	}
+	imgs := make([][]byte, count)
+	png := encodeTestPNG(t, w, h)
+	for i := range imgs {
+		imgs[i] = png
+	}
+	body, ct := multipartImageRequest(t, imgs)
+	req := httptest.NewRequest("POST", "/api/tools/convert", body)
+	req.Header.Set("Content-Type", ct)
+	wr := httptest.NewRecorder()
+	withToolLimits(handleToolConvert)(wr, req)
+	if wr.Code != http.StatusBadRequest {
+		t.Fatalf("status: %d want 400 body: %s", wr.Code, wr.Body.String())
+	}
+}
+
+// --- I2: video/image routing is case-insensitive on file extension ---
+
+func TestLooksLikeVideo_CaseInsensitive(t *testing.T) {
+	cases := map[string]bool{
+		"clip.mp4":  true,
+		"CLIP.MP4":  true,
+		"Video.MOV": true,
+		"photo.PNG": false,
+		"photo.png": false,
+	}
+	for name, want := range cases {
+		if got := looksLikeVideo(name); got != want {
+			t.Errorf("looksLikeVideo(%q) = %v, want %v", name, got, want)
+		}
 	}
 }
