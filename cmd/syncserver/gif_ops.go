@@ -80,3 +80,79 @@ func scalePaletted(src *image.Paletted, width, height int) *image.Paletted {
 	}
 	return dst
 }
+
+// rotateGIF returns a copy of g with every frame flipped and then rotated
+// clockwise by angle degrees. angle must be 0, 90, 180 or 270. flip must be
+// "none", "h" (mirror left-right) or "v" (mirror top-bottom); the flip is
+// applied before the rotation. Each frame keeps its own palette, delay and
+// disposal method.
+func rotateGIF(g *gif.GIF, angle int, flip string) (*gif.GIF, error) {
+	switch angle {
+	case 0, 90, 180, 270:
+	default:
+		return nil, fmt.Errorf("goc xoay khong hop le: %d (chi nhan 0, 90, 180, 270)", angle)
+	}
+	switch flip {
+	case "none", "h", "v":
+	default:
+		return nil, fmt.Errorf("kieu lat khong hop le: %q (chi nhan none, h, v)", flip)
+	}
+
+	out := &gif.GIF{
+		Image:           make([]*image.Paletted, len(g.Image)),
+		Delay:           append([]int(nil), g.Delay...),
+		LoopCount:       g.LoopCount,
+		Disposal:        append([]byte(nil), g.Disposal...),
+		BackgroundIndex: g.BackgroundIndex,
+		Config:          g.Config,
+	}
+	if angle == 90 || angle == 270 {
+		out.Config.Width = g.Config.Height
+		out.Config.Height = g.Config.Width
+	}
+
+	for i, frame := range g.Image {
+		out.Image[i] = rotatePaletted(frame, angle, flip)
+	}
+	return out, nil
+}
+
+// rotatePaletted flips src according to flip, then rotates it clockwise by
+// angle. Pixels are copied as palette indices, so the result shares src's
+// palette exactly. Each destination pixel is computed by inverting the rotation
+// and then the flip, so every output pixel reads exactly one source pixel.
+func rotatePaletted(src *image.Paletted, angle int, flip string) *image.Paletted {
+	srcB := src.Bounds()
+	w, h := srcB.Dx(), srcB.Dy()
+	dw, dh := w, h
+	if angle == 90 || angle == 270 {
+		dw, dh = h, w
+	}
+	dst := image.NewPaletted(image.Rect(0, 0, dw, dh), src.Palette)
+	for dy := 0; dy < dh; dy++ {
+		for dx := 0; dx < dw; dx++ {
+			// Undo the rotation: destination (dx,dy) -> flipped-image (fx,fy).
+			var fx, fy int
+			switch angle {
+			case 0:
+				fx, fy = dx, dy
+			case 90:
+				fx, fy = dy, h-1-dx
+			case 180:
+				fx, fy = w-1-dx, h-1-dy
+			case 270:
+				fx, fy = w-1-dy, dx
+			}
+			// Undo the flip (a flip is its own inverse).
+			sx, sy := fx, fy
+			switch flip {
+			case "h":
+				sx = w - 1 - fx
+			case "v":
+				sy = h - 1 - fy
+			}
+			dst.SetColorIndex(dx, dy, src.ColorIndexAt(srcB.Min.X+sx, srcB.Min.Y+sy))
+		}
+	}
+	return dst
+}

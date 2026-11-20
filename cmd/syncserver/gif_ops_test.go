@@ -59,3 +59,87 @@ func TestCropGIF_RejectsZeroSize(t *testing.T) {
 		t.Fatal("want error: w=0")
 	}
 }
+
+func TestRotateGIF_90SwapsDimensions(t *testing.T) {
+	g := makeTestGIF(t, 1, 200, 100)
+	out, err := rotateGIF(g, 90, "none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := out.Image[0].Bounds()
+	if b.Dx() != 100 || b.Dy() != 200 {
+		t.Fatalf("size: got %dx%d want 100x200", b.Dx(), b.Dy())
+	}
+}
+
+func TestRotateGIF_NoopPassesThrough(t *testing.T) {
+	g := makeTestGIF(t, 1, 200, 100)
+	out, err := rotateGIF(g, 0, "none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := out.Image[0].Bounds()
+	if b.Dx() != 200 || b.Dy() != 100 {
+		t.Fatal("size changed on no-op")
+	}
+}
+
+func TestRotateGIF_RejectsInvalidAngle(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 100)
+	if _, err := rotateGIF(g, 45, "none"); err == nil {
+		t.Fatal("want error for angle=45")
+	}
+}
+
+func TestRotateGIF_RejectsInvalidFlip(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 100)
+	if _, err := rotateGIF(g, 0, "diagonal"); err == nil {
+		t.Fatal("want error for flip=diagonal")
+	}
+}
+
+// Marks the top-left pixel of a 3x2 frame and checks where it lands. Rotation
+// is clockwise; flip is applied before rotation.
+func TestRotateGIF_PixelMapping(t *testing.T) {
+	cases := []struct {
+		name  string
+		angle int
+		flip  string
+		x, y  int // expected position of the marked pixel
+	}{
+		{"none-0", 0, "none", 0, 0},
+		{"cw-90", 90, "none", 1, 0},   // top-left -> top-right
+		{"cw-180", 180, "none", 2, 1}, // top-left -> bottom-right
+		{"cw-270", 270, "none", 0, 2}, // top-left -> bottom-left
+		{"h-0", 0, "h", 2, 0},         // mirror horizontally
+		{"v-0", 0, "v", 0, 1},         // mirror vertically
+		{"h-90", 90, "h", 1, 2},       // mirror to (2,0), then rotate CW to (1,2)
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			g := makeTestGIF(t, 1, 3, 2)
+			// Fill with 0 so the single marked pixel is the only non-zero one.
+			for j := range g.Image[0].Pix {
+				g.Image[0].Pix[j] = 0
+			}
+			g.Image[0].SetColorIndex(0, 0, 1)
+			out, err := rotateGIF(g, c.angle, c.flip)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dst := out.Image[0]
+			if got := dst.ColorIndexAt(c.x, c.y); got != 1 {
+				t.Fatalf("marked pixel not at (%d,%d)", c.x, c.y)
+			}
+			count := 0
+			for _, p := range dst.Pix {
+				if p != 0 {
+					count++
+				}
+			}
+			if count != 1 {
+				t.Fatalf("expected exactly one marked pixel, got %d", count)
+			}
+		})
+	}
+}
