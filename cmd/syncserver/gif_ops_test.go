@@ -100,6 +100,43 @@ func TestRotateGIF_RejectsInvalidFlip(t *testing.T) {
 
 // Marks the top-left pixel of a 3x2 frame and checks where it lands. Rotation
 // is clockwise; flip is applied before rotation.
+func TestReverseGIF_OrderAndDelay(t *testing.T) {
+	g := makeTestGIF(t, 3, 50, 50)
+	g.Delay = []int{10, 20, 30}
+	out := reverseGIF(g)
+	if len(out.Delay) != 3 || out.Delay[0] != 30 || out.Delay[2] != 10 {
+		t.Fatalf("delays not reversed: %v", out.Delay)
+	}
+}
+
+func TestReverseGIF_SingleFrameNoop(t *testing.T) {
+	g := makeTestGIF(t, 1, 50, 50)
+	out := reverseGIF(g)
+	if len(out.Image) != 1 {
+		t.Fatal("frame count changed")
+	}
+}
+
+func TestReverseGIF_ReversesImageAndDisposalInLockstep(t *testing.T) {
+	g := makeTestGIF(t, 3, 4, 4)
+	g.Delay = []int{10, 20, 30}
+	g.Disposal = []byte{1, 2, 3}
+	first, last := g.Image[0], g.Image[2]
+	out := reverseGIF(g)
+	if out.Image[0] != last || out.Image[2] != first {
+		t.Fatal("images not reversed")
+	}
+	if out.Disposal[0] != 3 || out.Disposal[1] != 2 || out.Disposal[2] != 1 {
+		t.Fatalf("disposal not reversed: %v", out.Disposal)
+	}
+	if out.Delay[0] != 30 || out.Delay[1] != 20 || out.Delay[2] != 10 {
+		t.Fatalf("delay not reversed: %v", out.Delay)
+	}
+	if g.Image[0] != first || g.Delay[0] != 10 || g.Disposal[0] != 1 {
+		t.Fatal("input was mutated")
+	}
+}
+
 func TestRotateGIF_PixelMapping(t *testing.T) {
 	cases := []struct {
 		name  string

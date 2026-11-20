@@ -66,6 +66,37 @@ func cropGIF(g *gif.GIF, x, y, w, h int) (*gif.GIF, error) {
 	return out, nil
 }
 
+// reverseGIF returns a copy of g with its frames played in reverse order. Image,
+// Delay and Disposal are reordered together so each frame keeps its own timing
+// and disposal method. Frame pixels are not touched. A GIF with one frame comes
+// back unchanged in content. Delay and Disposal are reversed only when they
+// have one entry per frame; otherwise they are copied as they are.
+func reverseGIF(g *gif.GIF) *gif.GIF {
+	n := len(g.Image)
+	out := &gif.GIF{
+		Image:           make([]*image.Paletted, n),
+		Delay:           append([]int(nil), g.Delay...),
+		LoopCount:       g.LoopCount,
+		Disposal:        append([]byte(nil), g.Disposal...),
+		BackgroundIndex: g.BackgroundIndex,
+		Config:          g.Config,
+	}
+	for i, frame := range g.Image {
+		out.Image[n-1-i] = frame
+	}
+	if len(g.Delay) == n {
+		for i, d := range g.Delay {
+			out.Delay[n-1-i] = d
+		}
+	}
+	if len(g.Disposal) == n {
+		for i, d := range g.Disposal {
+			out.Disposal[n-1-i] = d
+		}
+	}
+	return out
+}
+
 // scalePaletted nearest-neighbor scales src to width x height. Pixels are
 // copied as palette indices, so the result shares src's palette exactly.
 func scalePaletted(src *image.Paletted, width, height int) *image.Paletted {
