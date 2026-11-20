@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"image"
 	"image/color"
+	"image/gif"
 	"testing"
 )
 
@@ -74,5 +77,34 @@ func TestImagesToGIF_RejectsOverCount(t *testing.T) {
 	}
 	if _, err := imagesToGIF(imgs, 100); err == nil {
 		t.Fatal("want error over maxImagesCount")
+	}
+}
+
+func TestFfmpegAvailable_ReflectsPath(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg not installed in this environment; function exercised in Task 11's handler test with a stub")
+	}
+}
+
+func TestProbeVideoDuration_RejectsMissingFile(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg not available")
+	}
+	_, err := probeVideoDuration(context.Background(), "/no/such/file.mp4")
+	if err == nil {
+		t.Fatal("want error for missing file")
+	}
+}
+
+func TestVideoToGIF_HappyPath(t *testing.T) {
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg not available")
+	}
+	data, err := videoToGIF(context.Background(), "testdata/tiny.mp4", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gif.DecodeAll(bytes.NewReader(data)); err != nil {
+		t.Fatalf("output not a valid gif: %v", err)
 	}
 }

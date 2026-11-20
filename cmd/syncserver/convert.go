@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/color/palette"
 	"image/draw"
 	"image/gif"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // imageToGIF wraps img as a single-frame GIF. The frame is quantized to the
@@ -71,4 +77,69 @@ func resizeNearest(src image.Image, w, h int) *image.RGBA {
 		}
 	}
 	return dst
+}
+
+// ffmpegAvailable reports whether both ffmpeg and ffprobe are reachable on
+// PATH. Callers that depend on video transcoding should check this first and
+// degrade gracefully (e.g. return a clear error) when it is false.
+func ffmpegAvailable() bool {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return false
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		return false
+	}
+	return true
+}
+
+// probeVideoDuration runs ffprobe against the file at path and returns its
+// duration. It errors if the file is missing/unreadable or ffprobe's output
+// cannot be parsed.
+func probeVideoDuration(ctx context.Context, path string) (time.Duration, error) {
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "csv=p=0",
+		path,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("khong doc duoc thoi luong video: %w (%s)", err, strings.TrimSpace(stderr.String()))
+	}
+	secStr := strings.TrimSpace(stdout.String())
+	secs, err := strconv.ParseFloat(secStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("khong doc duoc thoi luong video: ffprobe tra ve gia tri khong hop le %q", secStr)
+	}
+	return time.Duration(secs * float64(time.Second)), nil
+}
+
+// videoToGIF transcodes the video at path into an animated GIF sampled at
+// fps frames per second. The video's duration is checked against
+// maxVideoDurationSec before ffmpeg is ever invoked, so an over-limit video
+// never reaches the transcode step.
+func videoToGIF(ctx context.Context, path string, fps int) ([]byte, error) {
+	dur, err := probeVideoDuration(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if dur > time.Duration(maxVideoDurationSec)*time.Second {
+		return nil, fmt.Errorf("video qua dai: %.1fs (toi da %ds)", dur.Seconds(), maxVideoDurationSec)
+	}
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", path,
+		"-vf", fmt.Sprintf("fps=%d", fps),
+		"-f", "gif",
+		"-",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("chuyen doi video sang gif that bai: %w (%s)", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), nil
 }
