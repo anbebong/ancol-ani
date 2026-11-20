@@ -180,3 +180,37 @@ func TestRotateGIF_PixelMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestSpeedGIF_ScalesDelay(t *testing.T) {
+	g := makeTestGIF(t, 1, 50, 50)
+	g.Delay = []int{10}
+	out, err := speedGIF(g, 2.0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Delay[0] != 5 {
+		t.Fatalf("delay: got %d want 5", out.Delay[0])
+	}
+}
+
+func TestSpeedGIF_RejectsNonPositiveFactor(t *testing.T) {
+	g := makeTestGIF(t, 1, 50, 50)
+	if _, err := speedGIF(g, 0); err == nil {
+		t.Fatal("want error for factor=0")
+	}
+	if _, err := speedGIF(g, -1); err == nil {
+		t.Fatal("want error for factor<0")
+	}
+}
+
+func TestSpeedGIF_ClampsToMinimumDelay(t *testing.T) {
+	g := makeTestGIF(t, 1, 50, 50)
+	g.Delay = []int{2}
+	out, err := speedGIF(g, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Delay[0] < 2 {
+		t.Fatalf("delay below GIF minimum: %d", out.Delay[0])
+	}
+}

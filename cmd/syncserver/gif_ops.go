@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/gif"
+	"math"
 )
 
 // resizeGIF returns a copy of g with every frame scaled to width x height
@@ -95,6 +96,33 @@ func reverseGIF(g *gif.GIF) *gif.GIF {
 		}
 	}
 	return out
+}
+
+// speedGIF returns a copy of g with every frame's delay divided by factor, so
+// factor 2 plays twice as fast. factor must be greater than 0. Each new delay is
+// rounded to the nearest centisecond and clamped to at least 2 centiseconds, the
+// de facto minimum most GIF renderers honor. Pixel data is not touched.
+func speedGIF(g *gif.GIF, factor float64) (*gif.GIF, error) {
+	if !(factor > 0) {
+		return nil, fmt.Errorf("he so toc do phai lon hon 0: %v", factor)
+	}
+
+	out := &gif.GIF{
+		Image:           append([]*image.Paletted(nil), g.Image...),
+		Delay:           make([]int, len(g.Delay)),
+		LoopCount:       g.LoopCount,
+		Disposal:        append([]byte(nil), g.Disposal...),
+		BackgroundIndex: g.BackgroundIndex,
+		Config:          g.Config,
+	}
+	for i, d := range g.Delay {
+		nd := int(math.Round(float64(d) / factor))
+		if nd < 2 {
+			nd = 2
+		}
+		out.Delay[i] = nd
+	}
+	return out, nil
 }
 
 // scalePaletted nearest-neighbor scales src to width x height. Pixels are
