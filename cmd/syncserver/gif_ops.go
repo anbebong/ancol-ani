@@ -44,21 +44,33 @@ func resizeGIF(g *gif.GIF, width, height int) (*gif.GIF, error) {
 }
 
 // cropGIF returns a copy of g with every frame cropped to the rectangle
-// (x, y, w, h) of the logical screen. Each output frame is re-materialized at
-// origin (0,0) so the encoder sees the same layout as any other GIF. Each frame
-// keeps its own palette, delay and disposal method.
+// (x, y, w, h) of the logical screen. The crop is validated against the
+// GIF's logical canvas (g.Config), not any single frame's own bounds, since
+// real GIFs commonly encode later frames as smaller sub-rectangles covering
+// only the pixels that changed ("delta encoding"); each frame is first
+// composited over the accumulated state of earlier frames (see
+// compositeGIFFrames) so a crop region outside a delta frame's own small
+// bounds still shows whatever was visible there (an earlier frame's
+// background), rather than reading past that frame's own pixel buffer -
+// which Paletted.ColorIndexAt silently reports as palette index 0 instead
+// of an error. Each output frame is re-materialized at origin (0,0) so the
+// encoder sees the same layout as any other GIF. Because every output frame
+// is now a complete, non-delta snapshot, Disposal is reset to
+// gif.DisposalNone throughout; the original per-frame delay is kept.
 func cropGIF(g *gif.GIF, x, y, w, h int) (*gif.GIF, error) {
-	srcB := g.Image[0].Bounds()
-	if w <= 0 || h <= 0 || x < 0 || y < 0 || x+w > srcB.Dx() || y+h > srcB.Dy() {
-		return nil, fmt.Errorf("vung cat khong hop le: (%d,%d) %dx%d vuot qua nguon %dx%d", x, y, w, h, srcB.Dx(), srcB.Dy())
+	canvasW, canvasH := g.Config.Width, g.Config.Height
+	if w <= 0 || h <= 0 || x < 0 || y < 0 || x+w > canvasW || y+h > canvasH {
+		return nil, fmt.Errorf("vung cat khong hop le: (%d,%d) %dx%d vuot qua nguon %dx%d", x, y, w, h, canvasW, canvasH)
 	}
 
-	rect := image.Rect(srcB.Min.X+x, srcB.Min.Y+y, srcB.Min.X+x+w, srcB.Min.Y+y+h)
+	composited := compositeGIFFrames(g)
+	cropMin := image.Pt(x, y)
+
 	out := &gif.GIF{
 		Image:           make([]*image.Paletted, len(g.Image)),
 		Delay:           append([]int(nil), g.Delay...),
 		LoopCount:       g.LoopCount,
-		Disposal:        append([]byte(nil), g.Disposal...),
+		Disposal:        make([]byte, len(g.Image)),
 		BackgroundIndex: g.BackgroundIndex,
 		Config:          g.Config,
 	}
@@ -66,16 +78,54 @@ func cropGIF(g *gif.GIF, x, y, w, h int) (*gif.GIF, error) {
 	out.Config.Height = h
 
 	for i, frame := range g.Image {
-		sub := frame.SubImage(rect).(*image.Paletted)
-		dst := image.NewPaletted(image.Rect(0, 0, w, h), sub.Palette)
-		for py := 0; py < h; py++ {
-			for px := 0; px < w; px++ {
-				dst.SetColorIndex(px, py, sub.ColorIndexAt(sub.Rect.Min.X+px, sub.Rect.Min.Y+py))
-			}
-		}
+		dst := image.NewPaletted(image.Rect(0, 0, w, h), frame.Palette)
+		draw.Draw(dst, dst.Bounds(), composited[i], cropMin, draw.Src)
 		out.Image[i] = dst
 	}
 	return out, nil
+}
+
+// compositeGIFFrames returns one full-logical-canvas RGBA image per frame of
+// g, with each frame's own pixels drawn on top of the accumulated state from
+// previous frames according to each frame's disposal method (gif.Disposal*).
+// This mirrors what a real GIF decoder/player shows at each frame: many
+// real-world GIFs encode later frames as small sub-rectangles covering only
+// the pixels that changed ("delta encoding"), relying on earlier frames'
+// pixels remaining visible underneath rather than every frame covering the
+// whole canvas.
+func compositeGIFFrames(g *gif.GIF) []*image.RGBA {
+	canvasRect := image.Rect(0, 0, g.Config.Width, g.Config.Height)
+	acc := image.NewRGBA(canvasRect)
+	out := make([]*image.RGBA, len(g.Image))
+
+	for i, frame := range g.Image {
+		disposal := byte(gif.DisposalNone)
+		if i < len(g.Disposal) {
+			disposal = g.Disposal[i]
+		}
+
+		var saved *image.RGBA
+		if disposal == gif.DisposalPrevious {
+			saved = image.NewRGBA(frame.Bounds())
+			draw.Draw(saved, frame.Bounds(), acc, frame.Bounds().Min, draw.Src)
+		}
+
+		draw.Draw(acc, frame.Bounds(), frame, frame.Bounds().Min, draw.Over)
+
+		snap := image.NewRGBA(canvasRect)
+		draw.Draw(snap, canvasRect, acc, canvasRect.Min, draw.Src)
+		out[i] = snap
+
+		switch disposal {
+		case gif.DisposalBackground:
+			draw.Draw(acc, frame.Bounds(), image.Transparent, image.Point{}, draw.Src)
+		case gif.DisposalPrevious:
+			if saved != nil {
+				draw.Draw(acc, frame.Bounds(), saved, saved.Bounds().Min, draw.Src)
+			}
+		}
+	}
+	return out
 }
 
 // reverseGIF returns a copy of g with its frames played in reverse order. Image,
@@ -231,17 +281,16 @@ type zippedFrame struct {
 	PNG  []byte
 }
 
-// splitGIFFrames decodes every frame of g onto the GIF's full logical canvas
-// and re-encodes each as a standalone PNG. Frames in test fixtures (and any
-// GIF whose frames already cover the whole canvas) convert directly; partial,
-// disposal-based sub-rectangle compositing across frames is out of scope here.
+// splitGIFFrames decodes every frame of g onto the GIF's full logical
+// canvas - compositing each frame over the accumulated state of earlier
+// frames per their disposal method, via compositeGIFFrames, so sub-rectangle
+// "delta" frames (very common in real-world GIFs) still show whatever
+// background was visible through them - and re-encodes each as a standalone
+// PNG.
 func splitGIFFrames(g *gif.GIF) ([]zippedFrame, error) {
-	canvas := image.Rect(0, 0, g.Config.Width, g.Config.Height)
-	frames := make([]zippedFrame, len(g.Image))
-	for i, frame := range g.Image {
-		rgba := image.NewRGBA(canvas)
-		draw.Draw(rgba, frame.Bounds(), frame, frame.Bounds().Min, draw.Src)
-
+	composited := compositeGIFFrames(g)
+	frames := make([]zippedFrame, len(composited))
+	for i, rgba := range composited {
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, rgba); err != nil {
 			return nil, fmt.Errorf("khong the ma hoa khung %d thanh png: %w", i, err)

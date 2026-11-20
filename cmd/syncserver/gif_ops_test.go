@@ -67,6 +67,71 @@ func TestCropGIF_RejectsZeroSize(t *testing.T) {
 	}
 }
 
+// makePartialFrameGIF builds a 2-frame GIF where frame 0 covers the whole
+// canvas in bg (the "background") and frame 1 is a small sub-rectangle at
+// (0,0)-(10,10) in fg (the "delta") - the common real-world GIF shape where
+// later frames only encode the pixels that changed, relying on earlier
+// frames' pixels staying visible underneath. garbage is a third palette
+// color that a correct implementation should never produce, used to detect
+// the out-of-bounds-read bug directly (a buggy cropGIF read garbage pixels
+// as palette index 0; by putting the garbage color at index 0 and
+// background at index 1, any garbage-colored output pixel proves the bug).
+func makePartialFrameGIF(t *testing.T, canvasW, canvasH int) (*gif.GIF, color.Palette) {
+	t.Helper()
+	garbage := color.RGBA{R: 255, A: 255}
+	bg := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	fg := color.RGBA{A: 255}
+	pal := color.Palette{garbage, bg, fg}
+
+	full := image.NewPaletted(image.Rect(0, 0, canvasW, canvasH), pal)
+	for i := range full.Pix {
+		full.Pix[i] = 1 // bg
+	}
+	delta := image.NewPaletted(image.Rect(0, 0, 10, 10), pal)
+	for i := range delta.Pix {
+		delta.Pix[i] = 2 // fg
+	}
+
+	anim := &gif.GIF{
+		Config:   image.Config{Width: canvasW, Height: canvasH, ColorModel: pal},
+		Image:    []*image.Paletted{full, delta},
+		Delay:    []int{10, 10},
+		Disposal: []byte{gif.DisposalNone, gif.DisposalNone},
+	}
+	return anim, pal
+}
+
+func TestCropGIF_CompositesPartialFrameOverBackground(t *testing.T) {
+	g, _ := makePartialFrameGIF(t, 100, 100)
+	out, err := cropGIF(g, 0, 0, 50, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Frame 1 (the delta frame) only paints (0,0)-(10,10); a pixel well
+	// outside that, inside the crop, must show frame 0's background, not
+	// the garbage color a buggy out-of-bounds read would produce.
+	got := out.Image[1].ColorIndexAt(30, 30)
+	if got != 1 {
+		t.Fatalf("pixel (30,30) of cropped delta frame: got palette index %d, want 1 (background)", got)
+	}
+	// The delta itself must still come through where it was actually drawn.
+	if got := out.Image[1].ColorIndexAt(5, 5); got != 2 {
+		t.Fatalf("pixel (5,5) of cropped delta frame: got palette index %d, want 2 (delta)", got)
+	}
+}
+
+func TestCropGIF_ValidatesAgainstLogicalCanvasNotFirstFrame(t *testing.T) {
+	// The logical canvas is 100x100, but frame 0 (the only frame cropGIF used
+	// to check bounds against) happens to be smaller. A crop that fits the
+	// real canvas but would have been rejected against frame 0's bounds must
+	// now succeed.
+	g, _ := makePartialFrameGIF(t, 100, 100)
+	g.Image[0] = image.NewPaletted(image.Rect(0, 0, 20, 20), g.Image[0].Palette)
+	if _, err := cropGIF(g, 60, 60, 20, 20); err != nil {
+		t.Fatalf("crop within the 100x100 logical canvas should succeed, got: %v", err)
+	}
+}
+
 func TestRotateGIF_90SwapsDimensions(t *testing.T) {
 	g := makeTestGIF(t, 1, 200, 100)
 	out, err := rotateGIF(g, 90, "none")
@@ -301,6 +366,31 @@ func TestSplitGIFFrames_Count(t *testing.T) {
 	b := img.Bounds()
 	if b.Dx() != 50 || b.Dy() != 50 {
 		t.Fatalf("frame 0 size: got %dx%d want 50x50", b.Dx(), b.Dy())
+	}
+}
+
+func TestSplitGIFFrames_CompositesPartialFrameOverBackground(t *testing.T) {
+	g, _ := makePartialFrameGIF(t, 100, 100)
+	frames, err := splitGIFFrames(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(frames[1].PNG))
+	if err != nil {
+		t.Fatalf("frame 1 not valid PNG: %v", err)
+	}
+	// A pixel outside the delta frame's own (0,0)-(10,10) must still show
+	// frame 0's white background, not a transparent/black hole - the bug
+	// the un-composited implementation had for any GIF using sub-rectangle
+	// delta frames.
+	r, g2, b, a := img.At(30, 30).RGBA()
+	if a == 0 || r>>8 != 255 || g2>>8 != 255 || b>>8 != 255 {
+		t.Fatalf("pixel (30,30) of frame 1's PNG: got rgba(%d,%d,%d,%d), want opaque white", r>>8, g2>>8, b>>8, a>>8)
+	}
+	// The delta itself must still be present where it was actually drawn.
+	r, g2, b, a = img.At(5, 5).RGBA()
+	if a>>8 != 255 || r>>8 != 0 || g2>>8 != 0 || b>>8 != 0 {
+		t.Fatalf("pixel (5,5) of frame 1's PNG: got rgba(%d,%d,%d,%d), want opaque black", r>>8, g2>>8, b>>8, a>>8)
 	}
 }
 
