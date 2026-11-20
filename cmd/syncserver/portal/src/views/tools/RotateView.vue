@@ -5,7 +5,7 @@ import ToolPage from '../../components/ToolPage.vue';
 import { postTool } from '../../toolsApi.js';
 import { errMsg } from '../../api.js';
 
-const angle = ref(90);
+const angle = ref(0);
 const flip = ref('none');
 const result = ref(null);
 const loading = ref(false);
@@ -39,9 +39,10 @@ async function onRun(file) {
           <label class="form-control flex-1">
             <span class="label-text">Góc xoay</span>
             <select v-model.number="angle" class="select select-bordered">
-              <option :value="90">90°</option>
+              <option :value="0">0° (không xoay)</option>
+              <option :value="90">90° (cùng chiều kim đồng hồ)</option>
               <option :value="180">180°</option>
-              <option :value="270">270°</option>
+              <option :value="270">270° (cùng chiều kim đồng hồ)</option>
             </select>
           </label>
           <label class="form-control flex-1">
