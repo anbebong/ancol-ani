@@ -108,6 +108,25 @@ func main() {
 	mux.HandleFunc("/admin/users/", s.withCORS(s.requireAdmin(s.dispatchAdminUsersSub)))
 	mux.HandleFunc("/admin/public/", s.withCORS(s.requireAdmin(s.handleAdminUnpublish)))
 
+	// GIF toolkit: public (no requireAuth), each behind the shared
+	// concurrency+timeout middleware so a couple of heavy jobs can't tie up
+	// the whole process.
+	if err := os.MkdirAll(toolTmpDir, 0o755); err != nil {
+		log.Fatalf("cannot create %s: %v", toolTmpDir, err)
+	}
+	if !ffmpegAvailable() {
+		log.Println("warning: ffmpeg/ffprobe not found, /api/tools/convert video path will return 503")
+	}
+	mux.HandleFunc("/api/tools/convert", s.withCORS(withToolLimits(handleToolConvert)))
+	mux.HandleFunc("/api/tools/resize", s.withCORS(withToolLimits(handleToolResize)))
+	mux.HandleFunc("/api/tools/crop", s.withCORS(withToolLimits(handleToolCrop)))
+	mux.HandleFunc("/api/tools/optimize", s.withCORS(withToolLimits(handleToolOptimize)))
+	mux.HandleFunc("/api/tools/rotate", s.withCORS(withToolLimits(handleToolRotate)))
+	mux.HandleFunc("/api/tools/reverse", s.withCORS(withToolLimits(handleToolReverse)))
+	mux.HandleFunc("/api/tools/speed", s.withCORS(withToolLimits(handleToolSpeed)))
+	mux.HandleFunc("/api/tools/split", s.withCORS(withToolLimits(handleToolSplit)))
+	mux.HandleFunc("/api/tools/caption", s.withCORS(withToolLimits(handleToolCaption)))
+
 	log.Printf("syncserver listening on %s (driver=%s)", addr, driver)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
