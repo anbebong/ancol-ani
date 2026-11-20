@@ -15,6 +15,7 @@ const routes = [
     { path: '/tools', name: 'tools', component: () => import('./views/ToolsIndexView.vue'), meta: { title: 'Công cụ GIF' } },
     { path: '/tools/resize', name: 'tools-resize', component: () => import('./views/tools/ResizeView.vue'), meta: { title: 'Resize GIF' } },
     { path: '/tools/convert', name: 'tools-convert', component: () => import('./views/tools/ConvertView.vue'), meta: { title: 'Chuyển đổi thành GIF' } },
+    { path: '/tools/crop', name: 'tools-crop', component: () => import('./views/tools/CropView.vue'), meta: { title: 'Crop GIF' } },
     { path: '/admin/users', name: 'admin-users', component: () => import('./views/AdminUsersView.vue'), meta: { auth: true, admin: true, title: 'Quản trị user' } },
     { path: '/admin/public', name: 'admin-public', component: () => import('./views/AdminPublicView.vue'), meta: { auth: true, admin: true, title: 'Quản trị GIF public' } },
     { path: '/:pathMatch(.*)*', redirect: '/library' },
