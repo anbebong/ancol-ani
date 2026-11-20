@@ -13,6 +13,7 @@ const routes = [
     { path: '/account', name: 'account', component: () => import('./views/AccountView.vue'), meta: { auth: true, title: 'Tài khoản' } },
     { path: '/gallery', name: 'gallery', component: () => import('./views/GalleryView.vue'), meta: { auth: true, title: 'Khám phá' } },
     { path: '/tools/resize', name: 'tools-resize', component: () => import('./views/tools/ResizeView.vue'), meta: { title: 'Resize GIF' } },
+    { path: '/tools/convert', name: 'tools-convert', component: () => import('./views/tools/ConvertView.vue'), meta: { title: 'Chuyển đổi thành GIF' } },
     { path: '/admin/users', name: 'admin-users', component: () => import('./views/AdminUsersView.vue'), meta: { auth: true, admin: true, title: 'Quản trị user' } },
     { path: '/admin/public', name: 'admin-public', component: () => import('./views/AdminPublicView.vue'), meta: { auth: true, admin: true, title: 'Quản trị GIF public' } },
     { path: '/:pathMatch(.*)*', redirect: '/library' },
