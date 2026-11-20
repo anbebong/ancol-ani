@@ -19,6 +19,7 @@ const links = computed(() => {
         { to: '/library', label: 'Thư viện', icon: 'images' },
         { to: '/history', label: 'Lịch sử', icon: 'history' },
         { to: '/gallery', label: 'Khám phá', icon: 'compass' },
+        { to: '/tools/resize', label: 'Công cụ GIF', icon: 'wand-2' },
     ];
     if (session.me?.isAdmin) {
         base.push(
