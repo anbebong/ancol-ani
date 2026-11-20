@@ -19,12 +19,19 @@ const loading = ref(false);
 const error = ref('');
 
 function switchTab(t) {
+    if (t === tab.value) return;
     tab.value = t;
     videoFile.value = null;
     imageFile.value = null;
     imagesFiles.value = [];
     result.value = null;
     error.value = '';
+    // Invalidate any in-flight request from the previous tab: without this,
+    // a slow video convert finishing after the user switched to "Ảnh" would
+    // still satisfy `mySeq === seq` and write its result/error onto the new
+    // tab's state.
+    seq++;
+    loading.value = false;
 }
 
 function onVideoFile(e) { videoFile.value = e.target.files[0] || null; }
