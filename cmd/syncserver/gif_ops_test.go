@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/gif"
+	"image/png"
 	"testing"
 )
 
@@ -278,5 +279,99 @@ func TestOptimizeGIF_RejectsInvalidLevel(t *testing.T) {
 	}
 	if _, err := optimizeGIF(g, 4); err == nil {
 		t.Fatal("want error for level=4")
+	}
+}
+
+func TestSplitGIFFrames_Count(t *testing.T) {
+	g := makeTestGIF(t, 4, 50, 50)
+	frames, err := splitGIFFrames(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 4 {
+		t.Fatalf("frames: got %d want 4", len(frames))
+	}
+	if frames[0].Name == "" {
+		t.Fatal("frame 0 has empty name")
+	}
+	img, err := png.Decode(bytes.NewReader(frames[0].PNG))
+	if err != nil {
+		t.Fatalf("frame 0 not valid PNG: %v", err)
+	}
+	b := img.Bounds()
+	if b.Dx() != 50 || b.Dy() != 50 {
+		t.Fatalf("frame 0 size: got %dx%d want 50x50", b.Dx(), b.Dy())
+	}
+}
+
+func TestCaptionGIF_RejectsEmptyText(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	if _, err := captionGIF(g, "", "top", "#ffffff", 16); err == nil {
+		t.Fatal("want error for empty text")
+	}
+}
+
+func TestCaptionGIF_RejectsWhitespaceOnlyText(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	if _, err := captionGIF(g, "   \t  ", "top", "#ffffff", 16); err == nil {
+		t.Fatal("want error for whitespace-only text")
+	}
+}
+
+func TestCaptionGIF_RejectsInvalidPosition(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	if _, err := captionGIF(g, "Hi", "middle", "#ffffff", 16); err == nil {
+		t.Fatal("want error for invalid position")
+	}
+}
+
+func TestCaptionGIF_RejectsInvalidHexColor(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	if _, err := captionGIF(g, "Hi", "top", "not-a-color", 16); err == nil {
+		t.Fatal("want error for invalid hex color")
+	}
+}
+
+func TestCaptionGIF_AppliesToAllFrames(t *testing.T) {
+	g := makeTestGIF(t, 3, 100, 50)
+	out, err := captionGIF(g, "Hi", "bottom", "#ffffff", 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Image) != 3 {
+		t.Fatal("frame count changed")
+	}
+}
+
+func TestCaptionGIF_ChangesPixels(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	out, err := captionGIF(g, "Hi", "top", "#ff0000", 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := out.Image[0]
+	changed := false
+	for y := 0; y < frame.Bounds().Dy() && !changed; y++ {
+		for x := 0; x < frame.Bounds().Dx(); x++ {
+			r, gg, b, _ := frame.At(x, y).RGBA()
+			if r>>8 > 200 && gg>>8 < 50 && b>>8 < 50 {
+				changed = true
+				break
+			}
+		}
+	}
+	if !changed {
+		t.Fatal("expected some pixels to match caption color #ff0000")
+	}
+}
+
+func TestCaptionGIF_WrapsLongText(t *testing.T) {
+	g := makeTestGIF(t, 1, 60, 50)
+	out, err := captionGIF(g, "this is a fairly long caption that should wrap", "bottom", "#ffffff", 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Image) != 1 {
+		t.Fatal("frame count changed")
 	}
 }

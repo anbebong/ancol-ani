@@ -1,13 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/gif"
+	"image/png"
 	"math"
 	"sort"
+	"strings"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 )
 
 // resizeGIF returns a copy of g with every frame scaled to width x height
@@ -214,6 +222,219 @@ func scalePaletted(src *image.Paletted, width, height int) *image.Paletted {
 		}
 	}
 	return dst
+}
+
+// zippedFrame is a single decoded GIF frame encoded as a standalone PNG,
+// named for inclusion in a zip archive.
+type zippedFrame struct {
+	Name string
+	PNG  []byte
+}
+
+// splitGIFFrames decodes every frame of g onto the GIF's full logical canvas
+// and re-encodes each as a standalone PNG. Frames in test fixtures (and any
+// GIF whose frames already cover the whole canvas) convert directly; partial,
+// disposal-based sub-rectangle compositing across frames is out of scope here.
+func splitGIFFrames(g *gif.GIF) ([]zippedFrame, error) {
+	canvas := image.Rect(0, 0, g.Config.Width, g.Config.Height)
+	frames := make([]zippedFrame, len(g.Image))
+	for i, frame := range g.Image {
+		rgba := image.NewRGBA(canvas)
+		draw.Draw(rgba, frame.Bounds(), frame, frame.Bounds().Min, draw.Src)
+
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, rgba); err != nil {
+			return nil, fmt.Errorf("khong the ma hoa khung %d thanh png: %w", i, err)
+		}
+		frames[i] = zippedFrame{
+			Name: fmt.Sprintf("frame_%03d.png", i+1),
+			PNG:  buf.Bytes(),
+		}
+	}
+	return frames, nil
+}
+
+// captionGIF returns a copy of g with text burned into every frame at a fixed
+// margin near the top or bottom of the canvas (position must be "top" or
+// "bottom"). text must contain non-whitespace content. hexColor is a
+// "#rrggbb" string. size is the desired glyph height in pixels; text is
+// rendered with basicfont.Face7x13 (its native size is 13px tall) and then
+// nearest-neighbor scaled up by size/13 to approximate the requested size.
+// Text that would exceed the frame's width wraps onto additional lines rather
+// than being clipped.
+func captionGIF(g *gif.GIF, text, position, hexColor string, size int) (*gif.GIF, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("noi dung chu thich khong duoc de trong")
+	}
+	if position != "top" && position != "bottom" {
+		return nil, fmt.Errorf("vi tri chu thich khong hop le: %q (chi nhan top, bottom)", position)
+	}
+	col, err := parseHexColor(hexColor)
+	if err != nil {
+		return nil, err
+	}
+	if size <= 0 {
+		return nil, fmt.Errorf("kich thuoc chu khong hop le: %d", size)
+	}
+
+	const margin = 4
+	scale := size / 13
+	if scale < 1 {
+		scale = 1
+	}
+
+	maxLineWidthNative := (g.Config.Width - 2*margin) / scale
+	if maxLineWidthNative < 1 {
+		maxLineWidthNative = 1
+	}
+	lines := wrapCaptionText(text, maxLineWidthNative)
+
+	textImg := renderCaptionLines(lines, col, scale)
+	tw, th := textImg.Bounds().Dx(), textImg.Bounds().Dy()
+
+	x := margin
+	var y int
+	if position == "top" {
+		y = margin
+	} else {
+		y = g.Config.Height - margin - th
+		if y < 0 {
+			y = 0
+		}
+	}
+
+	out := &gif.GIF{
+		Image:           make([]*image.Paletted, len(g.Image)),
+		Delay:           append([]int(nil), g.Delay...),
+		LoopCount:       g.LoopCount,
+		Disposal:        append([]byte(nil), g.Disposal...),
+		BackgroundIndex: g.BackgroundIndex,
+		Config:          g.Config,
+	}
+
+	for i, frame := range g.Image {
+		bounds := frame.Bounds()
+		rgba := image.NewRGBA(bounds)
+		draw.Draw(rgba, bounds, frame, bounds.Min, draw.Src)
+		draw.Draw(rgba, image.Rect(bounds.Min.X+x, bounds.Min.Y+y, bounds.Min.X+x+tw, bounds.Min.Y+y+th), textImg, image.Point{}, draw.Over)
+
+		pal := extendPalette(frame.Palette, col)
+		dst := image.NewPaletted(bounds, pal)
+		draw.Draw(dst, bounds, rgba, bounds.Min, draw.Src)
+		out.Image[i] = dst
+	}
+	return out, nil
+}
+
+// parseHexColor parses a "#rrggbb" string into an opaque color.RGBA.
+func parseHexColor(s string) (color.RGBA, error) {
+	trimmed := strings.TrimPrefix(s, "#")
+	if len(trimmed) != 6 {
+		return color.RGBA{}, fmt.Errorf("ma mau khong hop le: %q (dang #rrggbb)", s)
+	}
+	b, err := hex.DecodeString(trimmed)
+	if err != nil {
+		return color.RGBA{}, fmt.Errorf("ma mau khong hop le: %q (dang #rrggbb)", s)
+	}
+	return color.RGBA{R: b[0], G: b[1], B: b[2], A: 255}, nil
+}
+
+// wrapCaptionText greedily packs words of text into lines no wider than
+// maxWidthNative pixels (measured with basicfont.Face7x13 at its native
+// scale). A single word wider than maxWidthNative still gets its own line
+// rather than being split mid-word.
+func wrapCaptionText(text string, maxWidthNative int) []string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{text}
+	}
+
+	var lines []string
+	cur := words[0]
+	for _, w := range words[1:] {
+		trial := cur + " " + w
+		if font.MeasureString(basicfont.Face7x13, trial).Ceil() <= maxWidthNative {
+			cur = trial
+		} else {
+			lines = append(lines, cur)
+			cur = w
+		}
+	}
+	lines = append(lines, cur)
+	return lines
+}
+
+// renderCaptionLines draws lines (top to bottom) in col using
+// basicfont.Face7x13, then nearest-neighbor scales the result up by scale.
+func renderCaptionLines(lines []string, col color.RGBA, scale int) *image.RGBA {
+	face := basicfont.Face7x13
+	metrics := face.Metrics()
+	lineHeight := metrics.Height.Ceil()
+	ascent := metrics.Ascent.Ceil()
+
+	maxW := 1
+	lineImgs := make([]*image.RGBA, len(lines))
+	for i, ln := range lines {
+		w := font.MeasureString(face, ln).Ceil()
+		if w < 1 {
+			w = 1
+		}
+		if w > maxW {
+			maxW = w
+		}
+		img := image.NewRGBA(image.Rect(0, 0, w, lineHeight))
+		d := font.Drawer{
+			Dst:  img,
+			Src:  image.NewUniform(col),
+			Face: face,
+			Dot:  fixed.P(0, ascent),
+		}
+		d.DrawString(ln)
+		lineImgs[i] = img
+	}
+
+	native := image.NewRGBA(image.Rect(0, 0, maxW, lineHeight*len(lineImgs)))
+	for i, img := range lineImgs {
+		dr := image.Rect(0, i*lineHeight, img.Bounds().Dx(), (i+1)*lineHeight)
+		draw.Draw(native, dr, img, image.Point{}, draw.Over)
+	}
+
+	return upscaleRGBA(native, scale)
+}
+
+// upscaleRGBA nearest-neighbor scales src up by the integer factor scale.
+func upscaleRGBA(src *image.RGBA, scale int) *image.RGBA {
+	if scale <= 1 {
+		return src
+	}
+	b := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, b.Dx()*scale, b.Dy()*scale))
+	for y := 0; y < dst.Bounds().Dy(); y++ {
+		sy := b.Min.Y + y/scale
+		for x := 0; x < dst.Bounds().Dx(); x++ {
+			sx := b.Min.X + x/scale
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+	return dst
+}
+
+// extendPalette returns pal with c appended if pal doesn't already contain an
+// exact match for c and has room (GIF palettes are capped at 256 colors). If
+// pal is already full, it is returned unchanged and c will be matched to its
+// nearest existing entry when drawn.
+func extendPalette(pal color.Palette, c color.Color) color.Palette {
+	cr, cg, cb, ca := c.RGBA()
+	for _, e := range pal {
+		er, eg, eb, ea := e.RGBA()
+		if er == cr && eg == cg && eb == cb && ea == ca {
+			return pal
+		}
+	}
+	if len(pal) >= 256 {
+		return pal
+	}
+	return append(append(color.Palette(nil), pal...), c)
 }
 
 // rotateGIF returns a copy of g with every frame flipped and then rotated
