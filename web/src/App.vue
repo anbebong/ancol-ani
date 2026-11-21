@@ -71,7 +71,7 @@ async function reloadPage() {
             <Icon name="refresh-cw" :class="{ 'animate-spin': reloading }"/>
             <span class="hidden sm:inline">{{ t('reloadLabel') }}</span>
           </button>
-          <button type="button" class="btn btn-ghost btn-sm gap-1" :title="t('langToggleTitle')" @click="toggleLang">
+          <button type="button" class="btn btn-sm gap-1 btn-gradient" :title="t('langToggleTitle')" @click="toggleLang">
             <Icon name="languages"/> {{ lang === 'vi' ? 'EN' : 'VI' }}
           </button>
           <RouterLink v-if="account.token" to="/account" class="user-chip" active-class="is-active">

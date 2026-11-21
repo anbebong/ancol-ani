@@ -6,6 +6,17 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.8 — 2026-11-21
+
+### Mới
+- Cấu hình màu chữ và hiệu ứng (mờ dần, nảy, rung, gõ từng chữ) cho chữ hiển thị trên widget, có xem trước ngay trong trang Settings.
+- Nút "Tải lại" trang Settings, cạnh nút đổi ngôn ngữ.
+- Kiểm tra kết nối tới server trước khi Liên kết tài khoản / Mở portal, tránh vào trang lỗi khi địa chỉ sai hoặc server không chạy.
+
+### Thay đổi
+- Icon "Cài đặt" / "Hủy" rõ hơn khi phải chuột vào widget (thêm icon, màu đậm hơn).
+- Đồng bộ lại màu các nút trong Settings theo đúng theme (gradient tím-hồng giống tab).
+
 ## 1.1.7 — 2026-11-19
 
 ### Sửa lỗi

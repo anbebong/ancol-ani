@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { confirmDialog } from '@ui/modal.js';
@@ -10,11 +10,12 @@ import { toast, toastError } from '../toast.js';
 
 // ---------- start with Windows ----------
 const autoStart = ref(false);
-onMounted(async () => {
+async function loadAutoStart() {
     try {
         autoStart.value = (await (await fetch('/autostart')).text()).trim() === 'true';
     } catch (_) {}
-});
+}
+onMounted(loadAutoStart);
 async function setAutoStart(enabled) {
     const form = new FormData();
     form.append('enabled', String(enabled));
@@ -36,11 +37,12 @@ const CORNERS = [
     { id: 'br', labelKey: 'positionBR' },
 ];
 const corner = ref('br');
-onMounted(async () => {
+async function loadCorner() {
     try {
         corner.value = (await (await fetch('/position')).text()).trim() || 'br';
     } catch (_) {}
-});
+}
+onMounted(loadCorner);
 async function setCorner(c) {
     if (c === corner.value) return;
     const form = new FormData();
@@ -54,14 +56,92 @@ async function setCorner(c) {
 }
 
 // ---------- text on the widget ----------
+// Loaded from what's actually showing on the widget, so the box doubles as
+// "current text" display - someone who only wants to change color/effect
+// can leave it as-is and just hit Apply, instead of needing to retype it.
 const text = ref('');
+async function loadText() {
+    try {
+        text.value = (await (await fetch('/text')).text()).trim();
+    } catch (_) {}
+}
+onMounted(loadText);
+
+// ---------- text display style (color + entrance effect) ----------
+const TEXT_EFFECTS = [
+    { id: 'none', labelKey: 'textEffectNone' },
+    { id: 'fade', labelKey: 'textEffectFade' },
+    { id: 'bounce', labelKey: 'textEffectBounce' },
+    { id: 'shake', labelKey: 'textEffectShake' },
+    { id: 'typewriter', labelKey: 'textEffectTypewriter' },
+];
+const textColor = ref('#ffffff');
+const textEffect = ref('none');
+async function loadTextStyle() {
+    try {
+        const style = await (await fetch('/text/style')).json();
+        textColor.value = style.color || '#ffffff';
+        textEffect.value = style.effect || 'none';
+    } catch (_) {}
+}
+onMounted(loadTextStyle);
+async function saveTextStyle() {
+    const form = new FormData();
+    form.append('color', textColor.value);
+    form.append('effect', textEffect.value);
+    try {
+        await fetch('/text/style', { method: 'POST', body: form });
+    } catch (err) {
+        toastError(err);
+    }
+}
+
+// Live preview of the bubble (color + effect) right next to the GIF
+// preview below, so changing color/effect/text shows the result
+// immediately instead of only after it's saved and shown on the widget.
+const previewText = computed(() => text.value.trim() || t('textPreviewPlaceholder'));
+// Bumped whenever the text or effect changes, used as the bubble's :key so
+// Vue recreates the element - the cleanest way to restart a CSS animation
+// from its first frame (toggling the class alone wouldn't replay it).
+const previewAnimKey = ref(0);
+const typedPreviewText = ref('');
+let typewriterTimer = null;
+
+function runTypewriterPreview() {
+    clearInterval(typewriterTimer);
+    clearTimeout(typewriterTimer);
+    const value = previewText.value;
+    typedPreviewText.value = '';
+    let i = 0;
+    const type = () => {
+        i++;
+        typedPreviewText.value = value.slice(0, i);
+        if (i >= value.length) {
+            clearInterval(typewriterTimer);
+            typewriterTimer = setTimeout(() => {
+                typedPreviewText.value = '';
+                i = 0;
+                typewriterTimer = setInterval(type, 40);
+            }, 1500);
+        }
+    };
+    typewriterTimer = setInterval(type, 40);
+}
+
+watch([previewText, textEffect], () => {
+    previewAnimKey.value++;
+    if (textEffect.value === 'typewriter') runTypewriterPreview();
+    else { clearInterval(typewriterTimer); clearTimeout(typewriterTimer); }
+}, { immediate: true });
+
+onUnmounted(() => { clearInterval(typewriterTimer); clearTimeout(typewriterTimer); });
+
 async function sendText() {
     if (!text.value.trim()) return;
     const form = new FormData();
     form.append('text', text.value);
     try {
         await fetch('/text', { method: 'POST', body: form });
-        text.value = '';
         toast(t('toastTextSent'), 'success');
     } catch (err) {
         toastError(err);
@@ -191,6 +271,14 @@ async function pushCurrent() {
               <textarea v-model="text" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
               <button type="submit" class="btn btn-primary">{{ t('textSubmit') }}</button>
             </div>
+
+            <h2 class="font-bold flex items-center gap-2 mt-2"><Icon name="sparkles"/> {{ t('textStyleLabel') }}</h2>
+            <div class="flex gap-2 items-center flex-wrap">
+              <input v-model="textColor" type="color" class="input input-bordered h-10 w-14 p-1" @change="saveTextStyle"/>
+              <select v-model="textEffect" class="select select-bordered select-sm flex-1 min-w-0" @change="saveTextStyle">
+                <option v-for="fx in TEXT_EFFECTS" :key="fx.id" :value="fx.id">{{ t(fx.labelKey) }}</option>
+              </select>
+            </div>
           </div>
         </div>
       </form>
@@ -203,7 +291,17 @@ async function pushCurrent() {
 
         <div class="flex flex-col sm:flex-row gap-5">
           <div class="flex flex-col items-center gap-2 shrink-0">
-            <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-36 h-36"/>
+            <div class="flex flex-col items-center">
+              <!-- Fixed-height slot so the bubble's own size changing (text
+                   length, line wraps, the bounce/shake transforms) never
+                   pushes the GIF below it up or down. -->
+              <div class="text-bubble-slot">
+                <div class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
+                  {{ textEffect === 'typewriter' ? typedPreviewText : previewText }}
+                </div>
+              </div>
+              <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-36 h-36"/>
+            </div>
             <span class="field-label">{{ t('gifCurrent') }}</span>
           </div>
 
@@ -223,14 +321,14 @@ async function pushCurrent() {
                 <span v-if="busy" class="loading loading-spinner loading-sm"></span>
                 <Icon v-else name="check"/> {{ t('uploadSubmit') }}
               </button>
-              <button v-if="chosen" type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-1" :disabled="busy" @click="cancelPick">
+              <button v-if="chosen" type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-2" :disabled="busy" @click="cancelPick">
                 <Icon name="x"/> {{ t('cancelPickBtn') }}
               </button>
-              <button v-else type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-1" @click="reset">
+              <button v-else type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-2" @click="reset">
                 <Icon name="rotate-ccw"/> {{ t('resetSubmit') }}
               </button>
             </div>
-            <button v-if="account.token" type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-1 self-start" @click="pushCurrent">
+            <button v-if="account.token" type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-2 self-start" @click="pushCurrent">
               <Icon name="upload"/> {{ t('pushCurrentGifBtn') }}
             </button>
           </div>
@@ -239,3 +337,34 @@ async function pushCurrent() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Mirrors the widget's own #text-bubble (frontend/index.html) so the
+   preview here matches what actually shows on screen, just bigger. */
+.text-bubble-slot {
+  position: relative;
+  width: 100%;
+  height: 2.6rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.text-bubble-preview {
+  position: absolute;
+  bottom: 0.4rem;
+  max-width: 10rem;
+  max-height: 2.2rem;
+  overflow: hidden;
+  padding: 0.2rem 0.6rem;
+  background: rgba(20, 20, 43, 0.92);
+  border: 1.5px solid #8b73ff;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-align: center;
+  word-break: break-word;
+}
+</style>
+<!-- fx-fade/fx-bounce/fx-shake come from here - shared with the widget
+     itself (frontend/index.html) so the two never drift out of sync. -->
+<style src="@ui/text-effects.css"></style>

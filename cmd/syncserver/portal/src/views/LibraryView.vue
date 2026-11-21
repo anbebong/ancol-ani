@@ -27,6 +27,7 @@ const full = computed(() => quota.value !== null && total.value >= quota.value);
 
 async function load(p = page.value) {
     error.value = '';
+    loading.value = true;
     try {
         const res = await api(`/me/gifs?page=${p}&pageSize=${PAGE_SIZE}`);
         const data = await res.json();

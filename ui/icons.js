@@ -35,6 +35,11 @@ import square from 'lucide-static/icons/square.svg?raw';
 import power from 'lucide-static/icons/power.svg?raw';
 import github from 'lucide-static/icons/github.svg?raw';
 import x from 'lucide-static/icons/x.svg?raw';
+import wandSparkles from 'lucide-static/icons/wand-sparkles.svg?raw';
+import arrowLeft from 'lucide-static/icons/arrow-left.svg?raw';
+import rotateCw from 'lucide-static/icons/rotate-cw.svg?raw';
+import flipHorizontal from 'lucide-static/icons/flip-horizontal.svg?raw';
+import flipVertical from 'lucide-static/icons/flip-vertical.svg?raw';
 import refreshCw from 'lucide-static/icons/refresh-cw.svg?raw';
 
 // Raw lucide SVG markup by name, rendered through <Icon name="..."/>.
@@ -48,5 +53,7 @@ export const ICONS = {
     check, minus, key, lock, 'trash-2': trash2, history, compass, shield, search,
     type, link, unlink, 'rotate-ccw': rotateCcw, monitor, languages,
     'external-link': externalLink, server, sparkles, tag, square, power, github, x,
+    'wand-2': wandSparkles, 'arrow-left': arrowLeft, 'rotate-cw': rotateCw,
+    'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical,
     'refresh-cw': refreshCw,
 };

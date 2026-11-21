@@ -11,6 +11,26 @@ const SERVER_KEY = 'ancol-ani-sync-server';
 export const DEFAULT_SERVER = 'http://localhost:9090';
 export const PAGE_SIZE = 10;
 
+// Must match syncServiceID in cmd/syncserver/identity.go. A reachable HTTP
+// server at a typed-in address proves nothing by itself - checking this
+// marker is what tells "something answered" apart from "this is actually
+// our syncserver", before following a link to it (Liên kết / Mở portal).
+const SERVICE_ID = 'ancol-ani-syncserver';
+
+// Pings GET /identity on `serverUrl` and checks the marker. Used right
+// before navigating to the server, so a wrong address or a down server
+// shows an inline error here instead of a browser error page there.
+export async function checkServer(serverUrl) {
+    try {
+        const res = await fetch(serverUrl + '/identity', { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) return false;
+        const data = await res.json();
+        return data.service === SERVICE_ID;
+    } catch (_) {
+        return false;
+    }
+}
+
 function read(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
 function write(key, v) { try { v == null ? localStorage.removeItem(key) : localStorage.setItem(key, v); } catch (_) {} }
 

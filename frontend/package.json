@@ -11,6 +11,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "gifuct-js": "^2.1.2"
+    "gifuct-js": "^2.1.2",
+    "lucide-static": "^0.460.0"
   }
 }

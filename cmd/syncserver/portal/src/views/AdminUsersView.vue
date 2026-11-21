@@ -152,7 +152,7 @@ async function remove(u) {
             Gửi mật khẩu này cho user. Họ đã bị đăng xuất khỏi mọi thiết bị; sau khi đăng nhập nên tự đổi lại ở trang <b>Tài khoản</b>.
           </p>
           <p class="text-xs text-warning">Mật khẩu chỉ hiện một lần, đóng hộp này là không xem lại được.</p>
-          <button type="button" class="btn btn-ghost btn-sm" @click="reset = null">Đóng</button>
+          <button type="button" class="btn btn-ghost border-2 border-neutral btn-sm" @click="reset = null">Đóng</button>
         </div>
       </div>
     </div>
