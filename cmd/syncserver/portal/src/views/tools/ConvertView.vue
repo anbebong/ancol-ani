@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import ToolBackLink from '../../components/ToolBackLink.vue';
 import Icon from '@ui/components/Icon.vue';
 import ResultPreview from '../../components/ResultPreview.vue';
 import { postTool } from '../../toolsApi.js';
@@ -11,6 +12,7 @@ const tab = ref('video'); // 'video' | 'image' | 'images'
 const videoFile = ref(null);
 const videoFps = ref(10);
 const imageFile = ref(null);
+const imageFps = ref(5);
 const imagesFiles = ref([]);
 const imagesFps = ref(5);
 
@@ -62,6 +64,7 @@ async function run() {
             url += `?fps=${videoFps.value}`;
         } else if (tab.value === 'image') {
             fd.append('file', imageFile.value);
+            url += `?fps=${imageFps.value}`;
         } else {
             for (const f of imagesFiles.value) fd.append('file', f);
             url += `?fps=${imagesFps.value}`;
@@ -78,6 +81,7 @@ async function run() {
 
 <template>
   <div class="flex flex-col gap-6">
+    <ToolBackLink/>
     <PageHeader icon="images" title="Chuyển đổi thành GIF" subtitle="Từ video, một ảnh, hoặc nhiều ảnh."/>
 
     <div role="tablist" class="tabs tabs-boxed w-fit">
@@ -97,6 +101,10 @@ async function run() {
 
       <template v-else-if="tab === 'image'">
         <input type="file" accept="image/*" class="file-input file-input-bordered w-full" @change="onImageFile"/>
+        <label class="form-control">
+          <span class="label-text">Khung/giây</span>
+          <input v-model.number="imageFps" type="number" min="1" max="30" class="input input-bordered"/>
+        </label>
       </template>
 
       <template v-else>

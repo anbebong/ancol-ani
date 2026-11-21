@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from 'vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import ToolBackLink from '../../components/ToolBackLink.vue';
 import ToolPage from '../../components/ToolPage.vue';
+import Icon from '@ui/components/Icon.vue';
 import { postTool } from '../../toolsApi.js';
 import { errMsg } from '../../api.js';
 
@@ -32,27 +34,28 @@ async function onRun(file) {
 
 <template>
   <div class="flex flex-col gap-6">
+    <ToolBackLink/>
     <PageHeader icon="rotate-ccw" title="Rotate GIF" subtitle="Xoay hoặc lật GIF."/>
     <ToolPage :result="result" :loading="loading" :error="error" run-label="Rotate" @run="onRun">
       <template #params>
-        <div class="flex gap-3">
-          <label class="form-control flex-1">
+        <div class="flex flex-col gap-3">
+          <div>
             <span class="label-text">Góc xoay</span>
-            <select v-model.number="angle" class="select select-bordered">
-              <option :value="0">0° (không xoay)</option>
-              <option :value="90">90° (cùng chiều kim đồng hồ)</option>
-              <option :value="180">180°</option>
-              <option :value="270">270° (cùng chiều kim đồng hồ)</option>
-            </select>
-          </label>
-          <label class="form-control flex-1">
+            <div class="join">
+              <button type="button" class="btn join-item" :class="{ 'btn-active': angle === 0 }" title="Không xoay" @click="angle = 0">0°</button>
+              <button type="button" class="btn join-item" :class="{ 'btn-active': angle === 90 }" title="Xoay 90° cùng chiều kim đồng hồ" @click="angle = 90"><Icon name="rotate-cw" :size="18"/></button>
+              <button type="button" class="btn join-item" :class="{ 'btn-active': angle === 180 }" title="Xoay 180°" @click="angle = 180">180°</button>
+              <button type="button" class="btn join-item" :class="{ 'btn-active': angle === 270 }" title="Xoay 90° ngược chiều kim đồng hồ" @click="angle = 270"><Icon name="rotate-ccw" :size="18"/></button>
+            </div>
+          </div>
+          <div>
             <span class="label-text">Lật</span>
-            <select v-model="flip" class="select select-bordered">
-              <option value="none">Không lật</option>
-              <option value="h">Lật ngang</option>
-              <option value="v">Lật dọc</option>
-            </select>
-          </label>
+            <div class="join">
+              <button type="button" class="btn join-item" :class="{ 'btn-active': flip === 'none' }" title="Không lật" @click="flip = 'none'">Không</button>
+              <button type="button" class="btn join-item" :class="{ 'btn-active': flip === 'h' }" title="Lật ngang" @click="flip = 'h'"><Icon name="flip-horizontal" :size="18"/></button>
+              <button type="button" class="btn join-item" :class="{ 'btn-active': flip === 'v' }" title="Lật dọc" @click="flip = 'v'"><Icon name="flip-vertical" :size="18"/></button>
+            </div>
+          </div>
         </div>
       </template>
     </ToolPage>

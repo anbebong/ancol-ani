@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import ToolBackLink from '../../components/ToolBackLink.vue';
 import ToolPage from '../../components/ToolPage.vue';
 import { postTool } from '../../toolsApi.js';
 import { errMsg } from '../../api.js';
@@ -31,6 +32,7 @@ async function onRun(file) {
 
 <template>
   <div class="flex flex-col gap-6">
+    <ToolBackLink/>
     <PageHeader icon="wand-2" title="Speed GIF" subtitle="Tăng/giảm tốc độ phát GIF."/>
     <ToolPage :result="result" :loading="loading" :error="error" run-label="Áp dụng" @run="onRun">
       <template #params>
