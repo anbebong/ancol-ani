@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -329,9 +330,22 @@ const defaultCorner = "br"
 
 var validCorners = map[string]bool{"br": true, "bl": true, "tr": true, "tl": true, "tc": true, "bc": true}
 
+const defaultTextColor = "#ffffff"
+const defaultTextEffect = "none"
+
+var validTextEffects = map[string]bool{"none": true, "fade": true, "bounce": true, "shake": true, "typewriter": true}
+
+var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
 type widgetSettings struct {
 	Corner string `json:"corner"`
 	Text   string `json:"text"`
+	// Display style for Text: a hex color and one named entrance effect,
+	// applied by the widget (frontend/index.html) each time the text
+	// changes. Kept separate from Text itself so re-saving just the text
+	// (the common case) doesn't need to know the current style.
+	TextColor  string `json:"textColor"`
+	TextEffect string `json:"textEffect"`
 	// Port is only here so the separate "settings" subprocess (main.go's
 	// runSettingsApp, spawned by OpenSettings) can learn which port THIS
 	// process actually bound to - it has no other channel back to this
@@ -368,6 +382,20 @@ func getText() string {
 		return t
 	}
 	return defaultText
+}
+
+func getTextColor() string {
+	if c := getSettings().TextColor; hexColorRe.MatchString(c) {
+		return c
+	}
+	return defaultTextColor
+}
+
+func getTextEffect() string {
+	if e := getSettings().TextEffect; validTextEffects[e] {
+		return e
+	}
+	return defaultTextEffect
 }
 
 // settingsKey is a fixed AES-256 key baked into the binary. This is not
@@ -575,6 +603,31 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Write([]byte(getText()))
+	})
+
+	mux.HandleFunc("/text/style", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			color := strings.TrimSpace(r.FormValue("color"))
+			effect := strings.TrimSpace(r.FormValue("effect"))
+			if !hexColorRe.MatchString(color) {
+				http.Error(w, "invalid color", http.StatusBadRequest)
+				return
+			}
+			if !validTextEffects[effect] {
+				http.Error(w, "invalid effect", http.StatusBadRequest)
+				return
+			}
+			if err := saveSettings(func(s *widgetSettings) { s.TextColor = color; s.TextEffect = effect }); err != nil {
+				http.Error(w, "cannot save", http.StatusInternalServerError)
+				return
+			}
+			runtime.EventsEmit(ctx, "server-text-style", map[string]string{"color": color, "effect": effect})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		json.NewEncoder(w).Encode(map[string]string{"color": getTextColor(), "effect": getTextEffect()})
 	})
 
 	mux.HandleFunc("/gif", func(w http.ResponseWriter, r *http.Request) {

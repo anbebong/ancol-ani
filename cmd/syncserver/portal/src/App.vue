@@ -8,6 +8,12 @@ import AppLogo from '@ui/components/AppLogo.vue';
 const route = useRoute();
 const router = useRouter();
 
+// Plain `location.reload()` in a template gets compiled as `_ctx.location.reload()`
+// (Vue prefixes free identifiers that aren't local bindings), and the component
+// has no `location` property - so it silently throws on `undefined`. Go through
+// `window` explicitly instead.
+function reloadPage() { window.location.reload(); }
+
 const showShell = computed(() => route.name && route.name !== 'login' && route.name !== 'sso');
 
 // Fetch the profile (username / admin flag / quota) whenever a session
@@ -56,11 +62,14 @@ async function logout() {
         <div class="flex-1 md:hidden"></div>
 
         <div class="flex items-center gap-2 shrink-0">
+          <button type="button" class="btn btn-sm btn-square btn-gradient" title="Tải lại" @click="reloadPage">
+            <Icon name="refresh-cw"/>
+          </button>
           <RouterLink v-if="session.me" to="/account" class="user-chip" active-class="is-active" title="Tài khoản · đổi mật khẩu">
             <Icon :name="session.me.isAdmin ? 'crown' : 'user'" :size="14"/>
             <span class="max-w-[8rem] truncate">{{ session.me.username }}</span>
           </RouterLink>
-          <button type="button" class="btn btn-ghost btn-sm gap-1" title="Đăng xuất" @click="logout">
+          <button type="button" class="btn btn-ghost border-2 border-neutral btn-sm gap-2" title="Đăng xuất" @click="logout">
             <Icon name="log-out"/> <span class="hidden xl:inline">Đăng xuất</span>
           </button>
         </div>

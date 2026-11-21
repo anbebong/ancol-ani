@@ -5,11 +5,12 @@ import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { confirmDialog } from '@ui/modal.js';
 import { t } from '../i18n.js';
-import { account, loadMe, startLink, unlink } from '../account.js';
+import { account, loadMe, startLink, unlink, checkServer } from '../account.js';
 import { toast } from '../toast.js';
 
 const router = useRouter();
 const server = ref(account.server);
+const checking = ref(false);
 
 onMounted(() => { if (account.token) loadMe().catch(() => {}); });
 
@@ -20,8 +21,29 @@ onMounted(() => { if (account.token) loadMe().catch(() => {}); });
 const portalUrl = computed(() =>
     `${account.server}/#/sso?t=${encodeURIComponent(account.token || '')}&to=${encodeURIComponent('/account')}`);
 
-function link() {
-    startLink(server.value);
+// Both links below leave this page for `account.server`, so a wrong address
+// or a down server would otherwise land on a browser error page instead of
+// a message here. Check first (checkServer pings GET /identity) and only
+// navigate if it actually answers as our syncserver.
+async function link() {
+    checking.value = true;
+    try {
+        const addr = (server.value || '').trim().replace(/\/+$/, '') || account.server;
+        if (!(await checkServer(addr))) { toast(t('errServerUnreachable'), 'error'); return; }
+        startLink(server.value);
+    } finally {
+        checking.value = false;
+    }
+}
+
+async function openPortal() {
+    checking.value = true;
+    try {
+        if (!(await checkServer(account.server))) { toast(t('errServerUnreachable'), 'error'); return; }
+        window.open(portalUrl.value, '_blank', 'noopener');
+    } finally {
+        checking.value = false;
+    }
 }
 
 async function doUnlink() {
@@ -49,7 +71,10 @@ async function doUnlink() {
             <input v-model="server" type="text" :placeholder="t('serverPlaceholder')" class="grow bg-transparent min-w-0"/>
           </span>
         </label>
-        <button type="submit" class="btn btn-primary auth-submit gap-2"><Icon name="link"/> {{ t('linkBtn') }}</button>
+        <button type="submit" class="btn btn-primary auth-submit gap-2" :disabled="checking">
+          <span v-if="checking" class="loading loading-spinner loading-sm"></span>
+          <Icon v-else name="link"/> {{ t('linkBtn') }}
+        </button>
       </form>
     </div>
 
@@ -68,9 +93,10 @@ async function doUnlink() {
         <p class="text-xs text-base-content/60">{{ t('changePasswordHint') }}</p>
 
         <div class="flex gap-2 flex-wrap">
-          <a :href="portalUrl" target="_blank" rel="noopener" class="btn btn-primary btn-sm gap-1">
-            <Icon name="external-link"/> {{ t('openPortal') }}
-          </a>
+          <button type="button" class="btn btn-primary btn-sm gap-1" :disabled="checking" @click="openPortal">
+            <span v-if="checking" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else name="external-link"/> {{ t('openPortal') }}
+          </button>
           <button type="button" class="btn btn-error btn-sm gap-1" @click="doUnlink"><Icon name="unlink"/> {{ t('unlinkBtn') }}</button>
         </div>
       </div>

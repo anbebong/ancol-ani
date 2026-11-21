@@ -110,6 +110,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(webFS)))
 
+	mux.HandleFunc("/identity", s.withCORS(handleIdentity))
+
 	mux.HandleFunc("/auth/register", s.withCORS(s.handleRegister))
 	mux.HandleFunc("/auth/login", s.withCORS(s.handleLogin))
 	mux.HandleFunc("/auth/logout", s.withCORS(s.requireAuth(s.handleLogout)))

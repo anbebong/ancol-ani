@@ -7,6 +7,12 @@ import { account, loadMe } from './account.js';
 import { appInfo, hasUnseenUpdate, loadVersion } from './appInfo.js';
 import { toastState } from './toast.js';
 
+// Plain `location.reload()` in a template gets compiled as `_ctx.location.reload()`
+// (Vue prefixes free identifiers that aren't local bindings), and the component
+// has no `location` property - so it silently throws on `undefined`. Go through
+// `window` explicitly instead.
+function reloadPage() { window.location.reload(); }
+
 // Same shell as the server portal: sticky header with logo + nav, page
 // content below. Library/Explore only show once an account is linked.
 const links = computed(() => {
@@ -44,7 +50,10 @@ onMounted(loadVersion);
         <div class="flex-1 md:hidden"></div>
 
         <div class="flex items-center gap-2 shrink-0">
-          <button type="button" class="btn btn-ghost btn-sm gap-1" :title="t('langToggleTitle')" @click="toggleLang">
+          <button type="button" class="btn btn-sm btn-square btn-gradient" :title="t('reloadBtn')" @click="reloadPage">
+            <Icon name="refresh-cw"/>
+          </button>
+          <button type="button" class="btn btn-sm gap-1 btn-gradient" :title="t('langToggleTitle')" @click="toggleLang">
             <Icon name="languages"/> {{ lang === 'vi' ? 'EN' : 'VI' }}
           </button>
           <RouterLink v-if="account.token" to="/account" class="user-chip" active-class="is-active">

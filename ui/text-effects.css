@@ -1,0 +1,25 @@
+/* Looping "entrance" effects for displayed text: shared by the widget
+   itself (frontend/index.html, imported by relative path - that project
+   has no @ui alias) and the settings page's live preview
+   (web/src/views/WidgetView.vue, via @ui/text-effects.css), so the two
+   never drift out of sync the way two hand-copied blocks would.
+   "typewriter" has no CSS class here: both consumers drive it with their
+   own JS loop that retypes the text on a timer instead. */
+.fx-fade { animation: fx-fade 1.6s ease-in-out infinite; }
+@keyframes fx-fade { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.fx-bounce { animation: fx-bounce 1s cubic-bezier(.34, 1.56, .64, 1) infinite; }
+@keyframes fx-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* Shake plays in the first ~18% of a longer cycle, then holds still for
+   the rest - a "shake, pause, shake" loop instead of constant jitter,
+   which would be unreadable and distracting if it never let up. */
+.fx-shake { animation: fx-shake 2.2s ease infinite; }
+@keyframes fx-shake {
+  0%, 18.2% { transform: translateX(0); }
+  2.3% { transform: translateX(-4px); }
+  4.5% { transform: translateX(4px); }
+  6.8% { transform: translateX(-3px); }
+  9.1% { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}

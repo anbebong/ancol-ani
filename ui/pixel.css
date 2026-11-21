@@ -12,6 +12,15 @@ html {
   scrollbar-gutter: stable;
 }
 
+:root {
+  /* The one accent gradient for every colored button/active-state in the
+     product (tabs, primary buttons, page icons, the header's gradient
+     buttons) - defined once so they all read as the same color, not
+     several similar-but-different purples. */
+  --grad-accent: linear-gradient(135deg, #5c3eeb, #8b3ee0);
+  --grad-accent-hover: linear-gradient(135deg, #6c4eff, #9b4ee8);
+}
+
 body {
   background-image:
     linear-gradient(var(--fallback-b1, oklch(var(--b1))) 1px, transparent 1px),
@@ -33,6 +42,14 @@ body {
 }
 .btn:hover { filter: brightness(1.08); }
 .btn:not(.btn-ghost):active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 #000 !important; }
+
+/* Same accent gradient as the active tab/nav-link, so a primary button
+   reads as "the same color" as the rest of the themed UI instead of
+   daisyUI's flat solid fill. */
+.btn-primary {
+  background: var(--grad-accent) !important;
+  border-color: #35335a !important;
+}
 
 .input, .file-input {
   box-shadow: none !important;
@@ -85,7 +102,7 @@ body {
 .nav-link:hover { color: #e8e8f0; background: #1c1c3a; }
 .nav-link.is-active {
   color: #fff;
-  background: linear-gradient(135deg, #5c3eeb, #8b3ee0);
+  background: var(--grad-accent);
   border-color: #35335a;
   box-shadow: 2px 2px 0 #000;
 }
@@ -100,6 +117,22 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #e8a53d;
+}
+
+/* Gradient-filled icon button for the header bar (reload, language toggle):
+   same palette as .page-icon/.nav-link.is-active, so these read as themed
+   actions instead of plain ghost buttons. */
+.btn-gradient {
+  color: #fff !important;
+  background: var(--grad-accent);
+  border: 2px solid #35335a;
+  box-shadow: 2px 2px 0 #000;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-gradient:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #000;
+  background: var(--grad-accent-hover);
 }
 
 .user-chip {
@@ -275,7 +308,7 @@ body {
 .auth-tab:hover { color: #e8e8f0; }
 .auth-tab.is-active {
   color: #fff;
-  background: linear-gradient(135deg, #5c3eeb, #8b3ee0);
+  background: var(--grad-accent);
   box-shadow: 2px 2px 0 #000;
 }
 
@@ -297,11 +330,12 @@ body {
 }
 .auth-eye:hover { color: #e8e8f0; }
 
+/* Background comes from .btn-primary (always paired with this class); this
+   class only adjusts size. */
 .auth-submit {
   height: 3rem;
   font-size: 1rem;
   border: 2px solid #35335a;
-  background: linear-gradient(135deg, #5c3eeb, #ff6bd6);
 }
 .auth-submit:disabled { opacity: .7; color: #fff; }
 

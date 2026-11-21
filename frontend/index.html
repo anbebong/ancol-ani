@@ -45,6 +45,11 @@
             box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.45);
         }
         #text-bubble.is-empty { display: none; }
+        /* .fx-fade/.fx-bounce/.fx-shake (applied to #text-content for as
+           long as the current text is shown - see renderText below) come
+           from ../ui/text-effects.css, imported in the module script below.
+           "typewriter" has no CSS class: it's driven by a JS loop instead
+           that retypes the text on a timer. */
         #text-bubble::after {
             content: "";
             position: absolute;
@@ -96,17 +101,25 @@
         }
         #menu-overlay.is-open { display: flex; }
         #menu-overlay button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
             font: 700 9px/1.2 "Segoe UI", system-ui, sans-serif;
             color: #ffffff;
-            background: #8b73ff;
+            /* Solid, saturated purple instead of the old #8b73ff (too close
+               to the overlay's own dark-purple backdrop to stand out). */
+            background: #5c3eeb;
             border: none;
             border-radius: 4px;
             padding: 3px 2px;
             cursor: pointer;
         }
-        #menu-overlay button:hover { background: #a894ff; }
-        #menu-overlay button.cancel { background: rgba(255, 255, 255, 0.15); }
-        #menu-overlay button.cancel:hover { background: rgba(255, 255, 255, 0.25); }
+        .menu-icon { display: inline-flex; width: 10px; height: 10px; flex: none; }
+        .menu-icon svg { width: 100%; height: 100%; }
+        #menu-overlay button:hover { background: #7a5cf5; }
+        #menu-overlay button.cancel { background: #3a3a5c; }
+        #menu-overlay button.cancel:hover { background: #4d4d78; }
     </style>
 </head>
 <body>
@@ -114,21 +127,77 @@
 <div id="stage-wrap">
     <canvas id="stage"></canvas>
     <div id="menu-overlay">
-        <button id="menu-settings" type="button">Cài đặt</button>
-        <button id="menu-cancel" class="cancel" type="button">Hủy</button>
+        <button id="menu-settings" type="button"><span id="menu-settings-icon" class="menu-icon"></span>Cài đặt</button>
+        <button id="menu-cancel" class="cancel" type="button"><span id="menu-cancel-icon" class="menu-icon"></span>Hủy</button>
     </div>
 </div>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
+    import '../ui/text-effects.css';
+    import settingsIcon from 'lucide-static/icons/settings.svg?raw';
+    import xIcon from 'lucide-static/icons/x.svg?raw';
+
+    document.getElementById('menu-settings-icon').innerHTML = settingsIcon;
+    document.getElementById('menu-cancel-icon').innerHTML = xIcon;
+
+    // Current display style (color + entrance effect), set via the /text/style
+    // config endpoint; applied each time the text itself changes.
+    let textColor = '#ffffff';
+    let textEffect = 'none';
+    let typewriterTimer = null;
+
+    function applyStyle(style) {
+        if (!style) return;
+        if (style.color) textColor = style.color;
+        if (style.effect) textEffect = style.effect;
+        document.getElementById('text-content').style.color = textColor;
+    }
+
+    function renderText(value) {
+        const el = document.getElementById('text-content');
+        clearInterval(typewriterTimer);
+        el.classList.remove('fx-fade', 'fx-bounce', 'fx-shake');
+
+        if (textEffect === 'typewriter') {
+            // Loops: type the full text out, hold it a moment, clear, retype.
+            const TYPE_MS = 40;
+            const HOLD_MS = 1500;
+            let i = 0;
+            const type = () => {
+                i++;
+                el.textContent = value.slice(0, i);
+                if (i >= value.length) {
+                    clearInterval(typewriterTimer);
+                    typewriterTimer = setTimeout(() => {
+                        el.textContent = '';
+                        i = 0;
+                        typewriterTimer = setInterval(type, TYPE_MS);
+                    }, HOLD_MS);
+                }
+            };
+            el.textContent = '';
+            typewriterTimer = setInterval(type, TYPE_MS);
+            return;
+        }
+
+        el.textContent = value;
+        if (textEffect !== 'none') {
+            // Force a reflow so the animation replays even if the same
+            // effect class was already applied (e.g. the same text is re-set).
+            void el.offsetWidth;
+            el.classList.add('fx-' + textEffect);
+        }
+    }
 
     function setText(text) {
         const value = (text || '').trim();
-        document.getElementById('text-content').textContent = value;
+        renderText(value);
         // No bubble at all for empty text instead of an empty box.
         document.getElementById('text-bubble').classList.toggle('is-empty', !value);
     }
 
     window.runtime.EventsOn('server-text', setText);
+    window.runtime.EventsOn('server-text-style', applyStyle);
 
     // This page is served by Wails on its own origin, not by the Go local
     // server, so fetches to it need an absolute URL. The port comes from
@@ -136,8 +205,10 @@
     // hardcoded here too - change clientLocalPort in one place.
     const base = 'http://localhost:' + await window.go.main.App.LocalPort();
 
-    // GET /text persists across restarts (app.go), so load whatever was
-    // last set instead of always showing the hardcoded default above.
+    // GET /text and /text/style persist across restarts (app.go), so load
+    // whatever was last set instead of always showing the hardcoded
+    // default above. Style first, so the first render already uses it.
+    await fetch(base + '/text/style', { cache: 'no-store' }).then((r) => r.json()).then(applyStyle).catch(() => {});
     fetch(base + '/text', { cache: 'no-store' }).then((r) => r.text()).then(setText).catch(() => {});
 
     const canvas = document.getElementById('stage');

@@ -37,10 +37,10 @@ function continueWithResult() {
       <a :href="url" :download="result.filename" class="btn btn-primary btn-sm gap-2">
         <Icon name="download"/> Tải xuống {{ result.filename }}
       </a>
-      <RouterLink v-if="result.blob.type === 'image/gif'" to="/tools" class="btn btn-ghost btn-sm gap-2" @click="continueWithResult">
+      <RouterLink v-if="result.blob.type === 'image/gif'" to="/tools" class="btn btn-ghost border-2 border-neutral btn-sm gap-2" @click="continueWithResult">
         <Icon name="wand-2" :size="16"/> Tiếp tục xử lý GIF này
       </RouterLink>
-      <RouterLink v-else to="/tools" class="btn btn-ghost btn-sm gap-2">
+      <RouterLink v-else to="/tools" class="btn btn-ghost border-2 border-neutral btn-sm gap-2">
         <Icon name="wand-2" :size="16"/> Dùng công cụ khác
       </RouterLink>
     </template>
