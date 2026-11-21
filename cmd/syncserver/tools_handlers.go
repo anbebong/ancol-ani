@@ -387,8 +387,14 @@ func handleToolCaption(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "size khong hop le", http.StatusBadRequest)
 		return
 	}
+	posX, errX := queryInt(r, "x", 0)
+	posY, errY := queryInt(r, "y", 0)
+	if errX != nil || errY != nil {
+		http.Error(w, "x/y khong hop le", http.StatusBadRequest)
+		return
+	}
 	runWithToolSlot(w, r, func() {
-		out, err := captionGIF(g, text, position, hexColor, size)
+		out, err := captionGIF(g, text, position, hexColor, size, posX, posY)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

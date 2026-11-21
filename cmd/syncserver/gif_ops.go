@@ -303,20 +303,43 @@ func splitGIFFrames(g *gif.GIF) ([]zippedFrame, error) {
 	return frames, nil
 }
 
-// captionGIF returns a copy of g with text burned into every frame at a fixed
-// margin near the top or bottom of the canvas (position must be "top" or
-// "bottom"). text must contain non-whitespace content. hexColor is a
+// captionGIF returns a copy of g with text burned into every frame. For
+// position "top"/"bottom", text sits at a fixed margin near that edge.
+// For position "custom", text is placed with its top-left corner at
+// (posX, posY) - the UI's drag-to-position - clamped so it stays fully
+// inside the canvas. text must contain non-whitespace content. hexColor is a
 // "#rrggbb" string. size is the desired glyph height in pixels; text is
 // rendered with basicfont.Face7x13 (its native size is 13px tall) and then
 // nearest-neighbor scaled up by size/13 to approximate the requested size.
 // Text that would exceed the frame's width wraps onto additional lines rather
 // than being clipped.
-func captionGIF(g *gif.GIF, text, position, hexColor string, size int) (*gif.GIF, error) {
+// clampCaptionPos keeps a custom caption position's top-left corner so the
+// text box (tw x th) stays fully inside a canvasW x canvasH canvas, even
+// when the UI sends coordinates picked before a window resize or an
+// off-canvas drag.
+func clampCaptionPos(posX, posY, tw, th, canvasW, canvasH int) (int, int) {
+	x, y := posX, posY
+	if maxX := canvasW - tw; x > maxX {
+		x = maxX
+	}
+	if x < 0 {
+		x = 0
+	}
+	if maxY := canvasH - th; y > maxY {
+		y = maxY
+	}
+	if y < 0 {
+		y = 0
+	}
+	return x, y
+}
+
+func captionGIF(g *gif.GIF, text, position, hexColor string, size, posX, posY int) (*gif.GIF, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("noi dung chu thich khong duoc de trong")
 	}
-	if position != "top" && position != "bottom" {
-		return nil, fmt.Errorf("vi tri chu thich khong hop le: %q (chi nhan top, bottom)", position)
+	if position != "top" && position != "bottom" && position != "custom" {
+		return nil, fmt.Errorf("vi tri chu thich khong hop le: %q (chi nhan top, bottom, custom)", position)
 	}
 	col, err := parseHexColor(hexColor)
 	if err != nil {
@@ -343,13 +366,16 @@ func captionGIF(g *gif.GIF, text, position, hexColor string, size int) (*gif.GIF
 
 	x := margin
 	var y int
-	if position == "top" {
+	switch position {
+	case "top":
 		y = margin
-	} else {
+	case "bottom":
 		y = g.Config.Height - margin - th
 		if y < 0 {
 			y = 0
 		}
+	case "custom":
+		x, y = clampCaptionPos(posX, posY, tw, th, g.Config.Width, g.Config.Height)
 	}
 
 	out := &gif.GIF{

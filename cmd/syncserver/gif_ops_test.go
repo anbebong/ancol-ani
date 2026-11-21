@@ -396,35 +396,35 @@ func TestSplitGIFFrames_CompositesPartialFrameOverBackground(t *testing.T) {
 
 func TestCaptionGIF_RejectsEmptyText(t *testing.T) {
 	g := makeTestGIF(t, 1, 100, 50)
-	if _, err := captionGIF(g, "", "top", "#ffffff", 16); err == nil {
+	if _, err := captionGIF(g, "", "top", "#ffffff", 16, 0, 0); err == nil {
 		t.Fatal("want error for empty text")
 	}
 }
 
 func TestCaptionGIF_RejectsWhitespaceOnlyText(t *testing.T) {
 	g := makeTestGIF(t, 1, 100, 50)
-	if _, err := captionGIF(g, "   \t  ", "top", "#ffffff", 16); err == nil {
+	if _, err := captionGIF(g, "   \t  ", "top", "#ffffff", 16, 0, 0); err == nil {
 		t.Fatal("want error for whitespace-only text")
 	}
 }
 
 func TestCaptionGIF_RejectsInvalidPosition(t *testing.T) {
 	g := makeTestGIF(t, 1, 100, 50)
-	if _, err := captionGIF(g, "Hi", "middle", "#ffffff", 16); err == nil {
+	if _, err := captionGIF(g, "Hi", "middle", "#ffffff", 16, 0, 0); err == nil {
 		t.Fatal("want error for invalid position")
 	}
 }
 
 func TestCaptionGIF_RejectsInvalidHexColor(t *testing.T) {
 	g := makeTestGIF(t, 1, 100, 50)
-	if _, err := captionGIF(g, "Hi", "top", "not-a-color", 16); err == nil {
+	if _, err := captionGIF(g, "Hi", "top", "not-a-color", 16, 0, 0); err == nil {
 		t.Fatal("want error for invalid hex color")
 	}
 }
 
 func TestCaptionGIF_AppliesToAllFrames(t *testing.T) {
 	g := makeTestGIF(t, 3, 100, 50)
-	out, err := captionGIF(g, "Hi", "bottom", "#ffffff", 16)
+	out, err := captionGIF(g, "Hi", "bottom", "#ffffff", 16, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +435,7 @@ func TestCaptionGIF_AppliesToAllFrames(t *testing.T) {
 
 func TestCaptionGIF_ChangesPixels(t *testing.T) {
 	g := makeTestGIF(t, 1, 100, 50)
-	out, err := captionGIF(g, "Hi", "top", "#ff0000", 16)
+	out, err := captionGIF(g, "Hi", "top", "#ff0000", 16, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,9 +455,43 @@ func TestCaptionGIF_ChangesPixels(t *testing.T) {
 	}
 }
 
+func TestCaptionGIF_CustomPositionPlacesTextAtGivenCoords(t *testing.T) {
+	g := makeTestGIF(t, 1, 100, 50)
+	// Place the caption near the right edge, clear of the top/bottom
+	// margins captionGIF uses for "top"/"bottom" - if posX/posY were
+	// ignored, the red pixels would instead cluster near x=4,y=4 (top-left).
+	out, err := captionGIF(g, "A", "custom", "#ff0000", 16, 80, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := out.Image[0]
+	foundNearTarget := false
+	for y := 15; y < 35 && !foundNearTarget; y++ {
+		for x := 70; x < 100; x++ {
+			r, gg, b, _ := frame.At(x, y).RGBA()
+			if r>>8 > 200 && gg>>8 < 50 && b>>8 < 50 {
+				foundNearTarget = true
+				break
+			}
+		}
+	}
+	if !foundNearTarget {
+		t.Fatal("expected caption pixels near custom position (80,20), found none in that region")
+	}
+}
+
+func TestCaptionGIF_RejectsCustomPositionOutOfRange(t *testing.T) {
+	// position="custom" with coordinates must still be accepted (clamped),
+	// never rejected - only the position keyword itself is validated.
+	g := makeTestGIF(t, 1, 100, 50)
+	if _, err := captionGIF(g, "A", "custom", "#ff0000", 16, -50, 9999); err != nil {
+		t.Fatalf("expected out-of-range custom coords to be clamped, not rejected: %v", err)
+	}
+}
+
 func TestCaptionGIF_WrapsLongText(t *testing.T) {
 	g := makeTestGIF(t, 1, 60, 50)
-	out, err := captionGIF(g, "this is a fairly long caption that should wrap", "bottom", "#ffffff", 16)
+	out, err := captionGIF(g, "this is a fairly long caption that should wrap", "bottom", "#ffffff", 16, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
