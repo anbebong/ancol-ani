@@ -1,11 +1,11 @@
 <script setup>
-import { computed, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import AppLogo from '@ui/components/AppLogo.vue';
 import { t, lang, toggleLang } from './i18n.js';
 import { account, loadMe } from './account.js';
 import { appInfo, hasUnseenUpdate, loadVersion } from './appInfo.js';
-import { toastState } from './toast.js';
+import { toastState, toast } from './toast.js';
 
 // Same shell as the server portal: sticky header with logo + nav, page
 // content below. Library/Explore only show once an account is linked.
@@ -24,6 +24,29 @@ const links = computed(() => {
 watch(() => account.token, (tok) => { if (tok && !account.me) loadMe().catch(() => {}); }, { immediate: true });
 
 onMounted(loadVersion);
+
+// "Tải lại" in the header, on every page: remounts the current page (so it
+// refetches its own data - GIF lists, changelog, widget preview...) and
+// refreshes the shared version/account info. Not a full location.reload():
+// keeps login/language state, and also works in the standalone settings
+// window, which has no browser refresh button.
+const reloadKey = ref(0);
+const reloading = ref(false);
+async function reloadPage() {
+    if (reloading.value) return;
+    reloading.value = true;
+    reloadKey.value++;
+    try {
+        await Promise.all([
+            loadVersion(),
+            account.token ? loadMe().catch(() => {}) : Promise.resolve(),
+        ]);
+        toast(t('reloadDone'), 'success');
+    } finally {
+        // keep the spin visible briefly so the click is clearly acknowledged
+        setTimeout(() => { reloading.value = false; }, 400);
+    }
+}
 </script>
 
 <template>
@@ -44,6 +67,10 @@ onMounted(loadVersion);
         <div class="flex-1 md:hidden"></div>
 
         <div class="flex items-center gap-2 shrink-0">
+          <button type="button" class="btn btn-gradient btn-sm gap-1" :title="t('reloadTitle')" :disabled="reloading" @click="reloadPage">
+            <Icon name="refresh-cw" :class="{ 'animate-spin': reloading }"/>
+            <span class="hidden sm:inline">{{ t('reloadLabel') }}</span>
+          </button>
           <button type="button" class="btn btn-ghost btn-sm gap-1" :title="t('langToggleTitle')" @click="toggleLang">
             <Icon name="languages"/> {{ lang === 'vi' ? 'EN' : 'VI' }}
           </button>
@@ -66,7 +93,9 @@ onMounted(loadVersion);
     </header>
 
     <main class="max-w-5xl w-full mx-auto px-4 py-8 flex-1">
-      <RouterView/>
+      <RouterView v-slot="{ Component, route }">
+        <component :is="Component" :key="route.path + ':' + reloadKey"/>
+      </RouterView>
     </main>
 
     <footer class="flex items-center justify-center gap-1.5 text-xs text-base-content/50 pb-6">

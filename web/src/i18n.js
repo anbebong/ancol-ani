@@ -9,6 +9,9 @@ export const translations = {
         navGallery: 'Cộng đồng',
         navLink: 'Liên kết',
         langToggleTitle: 'Switch to English',
+        reloadLabel: 'Tải lại',
+        reloadTitle: 'Tải lại dữ liệu của trang này',
+        reloadDone: 'Đã tải lại',
 
         // Widget page
         widgetTitle: 'Hoạt ảnh',
@@ -119,6 +122,9 @@ export const translations = {
         navGallery: 'Explore',
         navLink: 'Link',
         langToggleTitle: 'Chuyển sang tiếng Việt',
+        reloadLabel: 'Reload',
+        reloadTitle: "Reload this page's data",
+        reloadDone: 'Reloaded',
 
         widgetTitle: 'Widget',
         textLabel: 'Display text',

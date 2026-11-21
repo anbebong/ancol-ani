@@ -338,3 +338,22 @@ body {
   background: #ff6bd6;
   box-shadow: 0 0 0 2px #14142b;
 }
+
+/* Colored header/action button in the same purple gradient as the active
+   nav tab (.nav-link.is-active), e.g. the settings page's "Tải lại".
+   Gets the hard pixel shadow from the generic .btn rule above. */
+.btn-gradient {
+  color: #fff;
+  background: linear-gradient(135deg, #5c3eeb, #8b3ee0);
+  border: 2px solid #35335a;
+}
+.btn-gradient:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #6b4ff0, #9a4ff0);
+  border-color: #35335a;
+}
+.btn-gradient:disabled {
+  color: #fff;
+  opacity: .75;
+  background: linear-gradient(135deg, #5c3eeb, #8b3ee0);
+}
