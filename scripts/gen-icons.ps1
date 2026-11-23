@@ -135,11 +135,13 @@ Write-Ico 'build/windows/icon.ico' $appIcoSizes $false 0   # exe icon + NSIS ins
 Write-Ico 'ancol.ico'              $appIcoSizes $false 0   # master copy at repo root
 Save-Bytes 'build/appicon.png' (New-Png 1024 $false 0)     # Wails source for macOS .icns / regenerating icon.ico
 
-# Browser tab / home-screen icons get the light tile. Same set for both
-# web UIs: the server portal and the client's local settings page.
+# Browser tab icon: transparent, no tile - the logo's own colors have
+# enough contrast now. apple-touch-icon keeps its light tile: iOS fills
+# transparency with plain black on the home screen, so that one needs an
+# opaque background regardless of the logo's own contrast.
 foreach ($site in 'cmd/syncserver/portal', 'web') {
-    Write-Ico  "$site/public/favicon.ico"          (16, 32, 48, 64) $true 0.10
-    Save-Bytes "$site/public/favicon-32.png"       (New-Png 32 $true 0.10)
+    Write-Ico  "$site/public/favicon.ico"          (16, 32, 48, 64) $false 0.05
+    Save-Bytes "$site/public/favicon-32.png"       (New-Png 32 $false 0.05)
     Save-Bytes "$site/public/apple-touch-icon.png" (New-Png 180 $true 0.12)
 }
 
