@@ -36,7 +36,7 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 - App desktop: `cd web && npm run build`, `cd frontend && npm run build`, rồi `wails build -s` (`-s` vì Wails tự cài npm sẽ thiếu `vite`). Wails CLI ở `C:\Users\an\go\bin\wails.exe`.
 - Sau `wails build`, khôi phục file nó tự sửa: `git checkout -- go.mod frontend/package.json.md5 frontend/wailsjs`.
 - Server: `cd cmd/syncserver/portal && npm run build`, rồi `go run ./cmd/syncserver` (cần thư mục `data/`). Server nhúng `portal/dist` lúc build, sửa portal phải khởi động lại server.
-- **Không tự tắt/mở `ancol-ani.exe`** khi chưa hỏi người dùng (exe đang chạy thì build đè sẽ lỗi). Build xong để họ tự mở.
+- Cần build lại client thì **tự tắt `ancol-ani.exe`** (cả 2 tiến trình: widget + cửa sổ settings) rồi build, **không cần hỏi** (người dùng đã đồng ý, 2026-11-21; exe đang chạy thì build đè sẽ lỗi). **Không tự mở lại** app sau khi build, để họ tự mở.
 
 ## Production
 

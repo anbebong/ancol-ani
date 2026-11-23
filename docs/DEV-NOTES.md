@@ -62,7 +62,7 @@ wails build -s        # -s = skip frontend build
 
 `wails build` còn tự sửa `go.mod`, `frontend/wailsjs/runtime/*` (chỉ đổi kiểu xuống dòng LF/CRLF) và `frontend/package.json.md5` (hash cache). Không có thay đổi thật → `git checkout -- go.mod frontend/wailsjs frontend/package.json.md5`.
 
-**Không bao giờ** tự ý tắt/mở app GUI (`ancol-ani.exe`) hộ user trừ khi họ đồng ý rõ ràng — build xong để họ tự mở; khởi động GUI app từ shell/agent không đáng tin (có thể không hiện cửa sổ, không có session desktop thật).
+**Tắt app để build:** người dùng đã đồng ý (2026-11-21) cho tự tắt `ancol-ani.exe` (cả widget lẫn cửa sổ settings) khi cần build lại, không cần hỏi. **Không tự mở lại** app GUI sau khi build — để họ tự mở; khởi động GUI app từ shell/agent không đáng tin (có thể không hiện cửa sổ, không có session desktop thật).
 
 ## 3. Mô hình dữ liệu (syncserver)
 
@@ -88,9 +88,9 @@ wails build -s        # -s = skip frontend build
 | DELETE | `/me/gifs/{id}` | có | |
 | POST | `/me/gifs/{id}/share` | có | body `{name (bắt buộc), tags}` |
 | POST | `/me/gifs/{id}/unshare` | có | |
-| GET | `/me/gif/history` | có | lịch sử share, có `gif_id` |
-| GET | `/public?q=&user=` | có (cần đăng nhập, không anonymous) | tìm theo tên/tag (`q`) và/hoặc đúng username (`user`) |
+| GET | `/public?q=&user=&sort=` | có (cần đăng nhập, không anonymous) | tìm theo tên/tag (`q`) và/hoặc đúng username (`user`); `sort=stars` = nhiều star nhất trước (mặc định mới nhất). Mỗi mục có `stars` và `starred` (người gọi đã star chưa) |
 | GET | `/public/{slug}` | có | blob ảnh public |
+| POST/DELETE | `/public/{slug}/star` | có | star / bỏ star kiểu GitHub (1 người 1 star / GIF, gọi lại không sao), trả `{stars, starred}`. Lưu ở bảng `gif_stars (user_id, gif_id)`; gắn với GIF chứ không với slug nên gỡ chia sẻ rồi chia sẻ lại vẫn giữ star; xóa GIF/user thì star liên quan bị xóa. `GET /me/gifs` có thêm `stars` (số star đã nhận) |
 | GET/DELETE/PATCH | `/admin/users...` | admin | list, xoá user, sửa quota |
 | DELETE | `/admin/public/{slug}` | admin | gỡ public bất kỳ |
 
