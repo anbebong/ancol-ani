@@ -1,53 +1,59 @@
 <#
 .SYNOPSIS
-  Regenerates every app icon / logo file from one source image.
-  See docs/ICONS.md for what each output file is used for.
+  Regenerates every app icon / logo file from the real vector logo
+  (ui/assets/logo.svg - the "A" + node cluster, transparent background),
+  rasterized at whatever size each output needs via @resvg/resvg-js (true
+  vector rendering, so nothing is ever blurry/upscaled). See docs/ICONS.md
+  for what each output file is used for.
 
 .EXAMPLE
-  # from a new high-res logo (recommended: square PNG >= 1024px, transparent background)
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source path\to\logo.png
-
-.EXAMPLE
-  # rebuild from the current ancol.ico (only 64px inside, so large sizes come out blurry)
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source ancol.ico
+  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1
 
 .EXAMPLE
   # dry run into another folder to inspect the results first
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source logo.png -OutRoot $env:TEMP\icons-test
+  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -OutRoot $env:TEMP\icons-test
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$Source,
     # Repo root to write into. Defaults to the repo this script lives in.
-    [string]$OutRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$OutRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$LogoSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo.svg')
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-# Light tile behind the (dark) glyph for places shown on dark backgrounds:
-# browser tabs in dark mode, the portal's dark UI, iOS home screen (which
-# fills transparency with black). Same color as AppLogo.vue's tile.
+$ScriptsDir = $PSScriptRoot
+if (-not (Test-Path (Join-Path $ScriptsDir 'node_modules\@resvg'))) {
+    Write-Host "Installing scripts/ tooling (npm install in $ScriptsDir)..."
+    Push-Location $ScriptsDir
+    npm install | Out-Null
+    Pop-Location
+}
+
+# Light tile behind the glyph for places shown on dark backgrounds: browser
+# tabs in dark mode, the portal's dark UI, iOS home screen (which fills
+# transparency with black). Same color as AppLogo.vue's tile.
 $TileColor = [System.Drawing.Color]::FromArgb(255, 241, 238, 252) # #f1eefc
 
-# ---------- load source ----------
-$Source = (Resolve-Path $Source).Path
-if ($Source -match '\.ico$') {
-    $ico = New-Object System.Drawing.Icon($Source, 256, 256) # picks the largest image inside
-    $src = $ico.ToBitmap()
-} else {
-    $src = [System.Drawing.Bitmap]::FromFile($Source)
-}
-Write-Host "source: $Source ($($src.Width)x$($src.Height))"
-if ($src.Width -lt 256) {
-    Write-Warning "Source is only $($src.Width)px - sizes above that will be upscaled and look blurry. Use a >= 1024px PNG if you have one."
+# ---------- helpers ----------
+
+# Rasterizes $LogoSvg at an exact pixel size via the Node/resvg helper
+# (GDI+ has no SVG support of its own) and returns it as a Bitmap.
+function Render-Glyph([int]$size) {
+    $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), "ancol-logo-$size-$([guid]::NewGuid().ToString('N')).png")
+    node (Join-Path $ScriptsDir 'render-svg.js') $LogoSvg $tmp $size
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) { throw "render-svg.js failed for size $size" }
+    $bmp = [System.Drawing.Bitmap]::FromFile($tmp)
+    $copy = New-Object System.Drawing.Bitmap($bmp) # detach from the file so it can be deleted
+    $bmp.Dispose()
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    return $copy
 }
 
-# ---------- helpers ----------
 function New-Png([int]$size, [bool]$tile, [double]$padRatio) {
     $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.Clear([System.Drawing.Color]::Transparent)
     if ($tile) {
@@ -63,7 +69,10 @@ function New-Png([int]$size, [bool]$tile, [double]$padRatio) {
     }
     $pad = [int][Math]::Round($size * $padRatio)
     if ($tile -and $pad -lt 1) { $pad = 1 }
-    $g.DrawImage($src, $pad, $pad, $size - 2 * $pad, $size - 2 * $pad)
+    $glyphSize = $size - 2 * $pad
+    $glyph = Render-Glyph $glyphSize
+    $g.DrawImage($glyph, $pad, $pad, $glyphSize, $glyphSize)
+    $glyph.Dispose()
     $g.Dispose()
     $ms = New-Object IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -100,6 +109,7 @@ function Save-Bytes([string]$rel, [byte[]]$bytes) {
 }
 
 # ---------- outputs ----------
+Write-Host "source: $LogoSvg"
 Write-Host "writing into: $OutRoot"
 
 # Desktop app (Wails). Transparent background, no tile.
@@ -120,8 +130,7 @@ foreach ($site in 'cmd/syncserver/portal', 'web') {
 # draws the light tile itself in CSS.
 Save-Bytes 'ui/assets/logo.png' (New-Png 128 $false 0)
 
-$src.Dispose()
 Write-Host ""
 Write-Host "Done. Next steps:"
 Write-Host "  1. Bump ?v= on the icon <link> tags in cmd/syncserver/portal/index.html and web/index.html so browsers drop the cached favicon."
-Write-Host "  2. Rebuild: cd $portal && npm run build ; cd web && npm run build ; wails build"
+Write-Host "  2. Rebuild: cd cmd/syncserver/portal && npm run build ; cd web && npm run build ; wails build"

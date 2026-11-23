@@ -1,0 +1,8 @@
+{
+  "name": "ancol-ani-icon-tools",
+  "private": true,
+  "description": "Dev-only tooling for scripts/gen-icons.ps1 - rasterizes ui/assets/logo.svg (and logo-gray.svg) to PNG via @resvg/resvg-js, since GDI+ (used for the rest of icon generation) can't parse SVG itself.",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}
