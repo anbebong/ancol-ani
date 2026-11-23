@@ -1,53 +1,76 @@
 <#
 .SYNOPSIS
-  Regenerates every app icon / logo file from one source image.
-  See docs/ICONS.md for what each output file is used for.
+  Regenerates every app icon / logo file from the real vector logo
+  (ui/assets/logo.svg - the "A" + node cluster, transparent background),
+  rasterized at whatever size each output needs via @resvg/resvg-js (true
+  vector rendering, so nothing is ever blurry/upscaled). See docs/ICONS.md
+  for what each output file is used for.
 
 .EXAMPLE
-  # from a new high-res logo (recommended: square PNG >= 1024px, transparent background)
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source path\to\logo.png
-
-.EXAMPLE
-  # rebuild from the current ancol.ico (only 64px inside, so large sizes come out blurry)
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source ancol.ico
+  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1
 
 .EXAMPLE
   # dry run into another folder to inspect the results first
-  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source logo.png -OutRoot $env:TEMP\icons-test
+  powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -OutRoot $env:TEMP\icons-test
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$Source,
     # Repo root to write into. Defaults to the repo this script lives in.
-    [string]$OutRoot = (Split-Path -Parent $PSScriptRoot)
+    [string]$OutRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$LogoSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo.svg'),
+    # Non-square, tightly-cropped variant used only for the nav-bar logomark
+    # (ui/components/AppLogo.vue): logo.svg's own viewBox is a square with
+    # the glyph's natural (wider-than-tall) shape centered in it, which is
+    # correct for a square icon slot (exe icon, favicon) but leaves visible
+    # top/bottom padding when used next to the "Ancol-Ani" wordmark.
+    [string]$LogoNavbarSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo-navbar.svg')
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-# Light tile behind the (dark) glyph for places shown on dark backgrounds:
-# browser tabs in dark mode, the portal's dark UI, iOS home screen (which
-# fills transparency with black). Same color as AppLogo.vue's tile.
+$ScriptsDir = $PSScriptRoot
+if (-not (Test-Path (Join-Path $ScriptsDir 'node_modules\@resvg'))) {
+    Write-Host "Installing scripts/ tooling (npm install in $ScriptsDir)..."
+    Push-Location $ScriptsDir
+    npm install | Out-Null
+    Pop-Location
+}
+
+# Light tile behind the glyph for places shown on dark backgrounds: browser
+# tabs in dark mode, the portal's dark UI, iOS home screen (which fills
+# transparency with black). Same color as AppLogo.vue's tile.
 $TileColor = [System.Drawing.Color]::FromArgb(255, 241, 238, 252) # #f1eefc
 
-# ---------- load source ----------
-$Source = (Resolve-Path $Source).Path
-if ($Source -match '\.ico$') {
-    $ico = New-Object System.Drawing.Icon($Source, 256, 256) # picks the largest image inside
-    $src = $ico.ToBitmap()
-} else {
-    $src = [System.Drawing.Bitmap]::FromFile($Source)
-}
-Write-Host "source: $Source ($($src.Width)x$($src.Height))"
-if ($src.Width -lt 256) {
-    Write-Warning "Source is only $($src.Width)px - sizes above that will be upscaled and look blurry. Use a >= 1024px PNG if you have one."
+# ---------- helpers ----------
+
+# Rasterizes $LogoSvg at an exact pixel size via the Node/resvg helper
+# (GDI+ has no SVG support of its own) and returns it as a Bitmap.
+function Render-Glyph([int]$size) {
+    $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), "ancol-logo-$size-$([guid]::NewGuid().ToString('N')).png")
+    node (Join-Path $ScriptsDir 'render-svg.js') $LogoSvg $tmp $size
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) { throw "render-svg.js failed for size $size" }
+    $bmp = [System.Drawing.Bitmap]::FromFile($tmp)
+    $copy = New-Object System.Drawing.Bitmap($bmp) # detach from the file so it can be deleted
+    $bmp.Dispose()
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    return $copy
 }
 
-# ---------- helpers ----------
+# Renders $LogoNavbarSvg (non-square) at exactly $height px tall, width
+# following from its own aspect ratio - no square canvas, no padding.
+function Render-NavbarLogo([int]$height) {
+    $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), "ancol-navbar-$height-$([guid]::NewGuid().ToString('N')).png")
+    node (Join-Path $ScriptsDir 'render-svg.js') $LogoNavbarSvg $tmp $height 'height'
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) { throw "render-svg.js failed for navbar height $height" }
+    $bytes = [IO.File]::ReadAllBytes($tmp)
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    return , $bytes
+}
+
 function New-Png([int]$size, [bool]$tile, [double]$padRatio) {
     $bmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.Clear([System.Drawing.Color]::Transparent)
     if ($tile) {
@@ -63,7 +86,10 @@ function New-Png([int]$size, [bool]$tile, [double]$padRatio) {
     }
     $pad = [int][Math]::Round($size * $padRatio)
     if ($tile -and $pad -lt 1) { $pad = 1 }
-    $g.DrawImage($src, $pad, $pad, $size - 2 * $pad, $size - 2 * $pad)
+    $glyphSize = $size - 2 * $pad
+    $glyph = Render-Glyph $glyphSize
+    $g.DrawImage($glyph, $pad, $pad, $glyphSize, $glyphSize)
+    $glyph.Dispose()
     $g.Dispose()
     $ms = New-Object IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -100,6 +126,7 @@ function Save-Bytes([string]$rel, [byte[]]$bytes) {
 }
 
 # ---------- outputs ----------
+Write-Host "source: $LogoSvg"
 Write-Host "writing into: $OutRoot"
 
 # Desktop app (Wails). Transparent background, no tile.
@@ -108,20 +135,22 @@ Write-Ico 'build/windows/icon.ico' $appIcoSizes $false 0   # exe icon + NSIS ins
 Write-Ico 'ancol.ico'              $appIcoSizes $false 0   # master copy at repo root
 Save-Bytes 'build/appicon.png' (New-Png 1024 $false 0)     # Wails source for macOS .icns / regenerating icon.ico
 
-# Browser tab / home-screen icons get the light tile. Same set for both
-# web UIs: the server portal and the client's local settings page.
+# Browser tab icon: transparent, no tile - the logo's own colors have
+# enough contrast now. apple-touch-icon keeps its light tile: iOS fills
+# transparency with plain black on the home screen, so that one needs an
+# opaque background regardless of the logo's own contrast.
 foreach ($site in 'cmd/syncserver/portal', 'web') {
-    Write-Ico  "$site/public/favicon.ico"          (16, 32, 48, 64) $true 0.10
-    Save-Bytes "$site/public/favicon-32.png"       (New-Png 32 $true 0.10)
+    Write-Ico  "$site/public/favicon.ico"          (16, 32, 48, 64) $false 0.05
+    Save-Bytes "$site/public/favicon-32.png"       (New-Png 32 $false 0.05)
     Save-Bytes "$site/public/apple-touch-icon.png" (New-Png 180 $true 0.12)
 }
 
-# In-page logo shared by both web UIs: transparent, ui/components/AppLogo.vue
-# draws the light tile itself in CSS.
-Save-Bytes 'ui/assets/logo.png' (New-Png 128 $false 0)
+# In-page nav-bar logomark shared by both web UIs (ui/components/AppLogo.vue):
+# transparent, non-square (tight-cropped), rendered at a tall enough size to
+# stay sharp at any size prop the component is used with.
+Save-Bytes 'ui/assets/logo.png' (Render-NavbarLogo 256)
 
-$src.Dispose()
 Write-Host ""
 Write-Host "Done. Next steps:"
 Write-Host "  1. Bump ?v= on the icon <link> tags in cmd/syncserver/portal/index.html and web/index.html so browsers drop the cached favicon."
-Write-Host "  2. Rebuild: cd $portal && npm run build ; cd web && npm run build ; wails build"
+Write-Host "  2. Rebuild: cd cmd/syncserver/portal && npm run build ; cd web && npm run build ; wails build"
