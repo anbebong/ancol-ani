@@ -12,17 +12,19 @@ defineProps({
 </script>
 
 <template>
-  <span class="app-logo" :style="{ width: size + 'px', height: size + 'px' }">
+  <span class="app-logo" :style="{ height: size + 'px' }">
     <img :src="logo" alt="Ancol-Ani"/>
   </span>
 </template>
 
 <style scoped>
+/* Height-only: logo.png is a tight crop of the glyph's own (wider-than-tall)
+   shape, not a square, so width follows from the image's natural aspect
+   ratio instead of being forced square and padded. */
 .app-logo {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
-.app-logo img { width: 100%; height: 100%; max-width: none; object-fit: contain; }
+.app-logo img { height: 100%; width: auto; display: block; }
 </style>

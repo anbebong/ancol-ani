@@ -16,7 +16,13 @@
 param(
     # Repo root to write into. Defaults to the repo this script lives in.
     [string]$OutRoot = (Split-Path -Parent $PSScriptRoot),
-    [string]$LogoSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo.svg')
+    [string]$LogoSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo.svg'),
+    # Non-square, tightly-cropped variant used only for the nav-bar logomark
+    # (ui/components/AppLogo.vue): logo.svg's own viewBox is a square with
+    # the glyph's natural (wider-than-tall) shape centered in it, which is
+    # correct for a square icon slot (exe icon, favicon) but leaves visible
+    # top/bottom padding when used next to the "Ancol-Ani" wordmark.
+    [string]$LogoNavbarSvg = (Join-Path (Split-Path -Parent $PSScriptRoot) 'ui\assets\logo-navbar.svg')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +54,17 @@ function Render-Glyph([int]$size) {
     $bmp.Dispose()
     Remove-Item $tmp -ErrorAction SilentlyContinue
     return $copy
+}
+
+# Renders $LogoNavbarSvg (non-square) at exactly $height px tall, width
+# following from its own aspect ratio - no square canvas, no padding.
+function Render-NavbarLogo([int]$height) {
+    $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), "ancol-navbar-$height-$([guid]::NewGuid().ToString('N')).png")
+    node (Join-Path $ScriptsDir 'render-svg.js') $LogoNavbarSvg $tmp $height 'height'
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) { throw "render-svg.js failed for navbar height $height" }
+    $bytes = [IO.File]::ReadAllBytes($tmp)
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    return , $bytes
 }
 
 function New-Png([int]$size, [bool]$tile, [double]$padRatio) {
@@ -126,9 +143,10 @@ foreach ($site in 'cmd/syncserver/portal', 'web') {
     Save-Bytes "$site/public/apple-touch-icon.png" (New-Png 180 $true 0.12)
 }
 
-# In-page logo shared by both web UIs: transparent, ui/components/AppLogo.vue
-# draws the light tile itself in CSS.
-Save-Bytes 'ui/assets/logo.png' (New-Png 128 $false 0)
+# In-page nav-bar logomark shared by both web UIs (ui/components/AppLogo.vue):
+# transparent, non-square (tight-cropped), rendered at a tall enough size to
+# stay sharp at any size prop the component is used with.
+Save-Bytes 'ui/assets/logo.png' (Render-NavbarLogo 256)
 
 Write-Host ""
 Write-Host "Done. Next steps:"

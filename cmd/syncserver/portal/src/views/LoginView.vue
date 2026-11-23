@@ -76,9 +76,9 @@ async function submit() {
         <div class="auth-stripe"></div>
         <form class="card-body gap-5" novalidate @submit.prevent="submit">
           <div class="text-center flex flex-col gap-1">
-            <h1 class="text-2xl font-extrabold tracking-tight flex items-center justify-center gap-2.5">
+            <h1 class="text-2xl font-extrabold tracking-tight flex items-end justify-center gap-0">
               <AppLogo :size="34"/>
-              <span class="gradient-text">Ancol-Ani</span>
+              <span class="gradient-text leading-none">ncol-Ani</span>
             </h1>
             <p class="text-sm text-base-content/60">
               {{ isLogin
