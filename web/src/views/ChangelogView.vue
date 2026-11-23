@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
@@ -77,6 +77,12 @@ onMounted(async () => {
 
     scrollToSection(route.query.section);
 });
+
+// Version history is collapsed by default - each release shows only
+// "vX.Y.Z · date"; clicking a row toggles its details.
+const expanded = reactive({});
+function toggleRelease(version) { expanded[version] = !expanded[version]; }
+function itemCount(r) { return r.groups.reduce((n, g) => n + g.items.length, 0); }
 
 // Color per group title (both languages / common wordings).
 function groupClass(title) {
@@ -170,17 +176,22 @@ const policyContact = 'angokodau@gmail.com';
       <p>{{ t('changelogError') }}</p>
     </div>
 
-    <div v-else id="section-version" class="flex flex-col gap-5 max-w-3xl">
+    <div v-else id="section-version" class="flex flex-col gap-3 max-w-3xl">
       <div v-for="r in releases" :key="r.version" class="card bg-base-100" :class="{ 'release-current': r.version === appInfo.version }">
-        <div class="card-body gap-4">
-          <div class="flex items-center gap-3 flex-wrap">
-            <h2 class="text-xl font-extrabold flex items-center gap-2">
-              <Icon name="tag"/> v{{ r.version }}
-            </h2>
-            <span v-if="r.version === appInfo.version" class="badge badge-primary">{{ t('changelogCurrent') }}</span>
-            <span v-if="r.date" class="text-sm text-base-content/50 ml-auto">{{ r.date }}</span>
-          </div>
+        <button type="button" class="release-row" :aria-expanded="!!expanded[r.version]"
+          :aria-controls="'release-' + r.version" :title="t('changelogToggle')" @click="toggleRelease(r.version)">
+          <span class="text-lg font-extrabold flex items-center gap-2">
+            <Icon name="tag"/> v{{ r.version }}
+          </span>
+          <span v-if="r.version === appInfo.version" class="badge badge-primary badge-sm">{{ t('changelogCurrent') }}</span>
+          <span class="text-xs text-base-content/40 hidden sm:inline">{{ t('changelogItems', { n: itemCount(r) }) }}</span>
+          <span class="ml-auto flex items-center gap-3">
+            <span v-if="r.date" class="text-sm text-base-content/50">{{ r.date }}</span>
+            <Icon name="chevron-down" class="release-chevron" :class="{ 'is-open': expanded[r.version] }"/>
+          </span>
+        </button>
 
+        <div v-if="expanded[r.version]" :id="'release-' + r.version" class="card-body gap-4 pt-1">
           <div v-for="(g, gi) in r.groups" :key="gi" class="flex flex-col gap-2">
             <span v-if="g.title" class="badge badge-sm self-start" :class="groupClass(g.title)">{{ g.title }}</span>
             <ul class="changelog-list">
@@ -201,6 +212,21 @@ const policyContact = 'angokodau@gmail.com';
 
 <style scoped>
 .release-current { border-color: #5c3eeb; }
+.release-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0.9rem 1.25rem;
+  text-align: left;
+  border-radius: inherit;
+  transition: background .15s ease;
+}
+.release-row:hover { background: rgba(92, 62, 235, 0.08); }
+.release-row:focus-visible { outline: 2px solid #5c3eeb; outline-offset: -2px; }
+.release-chevron { color: #8d89a8; transition: transform .2s ease; }
+.release-chevron.is-open { transform: rotate(180deg); }
 .changelog-list {
   display: flex;
   flex-direction: column;

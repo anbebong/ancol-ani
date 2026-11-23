@@ -77,11 +77,16 @@ const TEXT_EFFECTS = [
 ];
 const textColor = ref('#ffffff');
 const textEffect = ref('none');
+// Seconds each line stays up when the text has several lines (app.go
+// accepts 2-30).
+const TEXT_INTERVALS = [2, 3, 4, 5, 8, 10, 15, 30];
+const textInterval = ref(4);
 async function loadTextStyle() {
     try {
         const style = await (await fetch('/text/style')).json();
         textColor.value = style.color || '#ffffff';
         textEffect.value = style.effect || 'none';
+        textInterval.value = Number(style.interval) || 4;
     } catch (_) {}
 }
 onMounted(loadTextStyle);
@@ -89,6 +94,7 @@ async function saveTextStyle() {
     const form = new FormData();
     form.append('color', textColor.value);
     form.append('effect', textEffect.value);
+    form.append('interval', String(textInterval.value));
     try {
         await fetch('/text/style', { method: 'POST', body: form });
     } catch (err) {
@@ -99,42 +105,54 @@ async function saveTextStyle() {
 // Live preview of the bubble (color + effect) right next to the GIF
 // preview below, so changing color/effect/text shows the result
 // immediately instead of only after it's saved and shown on the widget.
-const previewText = computed(() => text.value.trim() || t('textPreviewPlaceholder'));
-// Bumped whenever the text or effect changes, used as the bubble's :key so
-// Vue recreates the element - the cleanest way to restart a CSS animation
-// from its first frame (toggling the class alone wouldn't replay it).
+// One message per line; the widget shows them one after another. The
+// preview runs the same rotation (same timings as frontend/index.html).
+const previewLines = computed(() => {
+    const lines = text.value.split('\n').map((l) => l.trim()).filter(Boolean);
+    return lines.length ? lines : [t('textPreviewPlaceholder')];
+});
+const previewIdx = ref(0);
+const previewShown = ref('');
+// Bumped on every line change, used as the bubble's :key so Vue recreates
+// the element - the cleanest way to restart a CSS animation from its first
+// frame (toggling the class alone wouldn't replay it).
 const previewAnimKey = ref(0);
-const typedPreviewText = ref('');
-let typewriterTimer = null;
+let previewTimer = null;
 
-function runTypewriterPreview() {
-    clearInterval(typewriterTimer);
-    clearTimeout(typewriterTimer);
-    const value = previewText.value;
-    typedPreviewText.value = '';
-    let i = 0;
-    const type = () => {
-        i++;
-        typedPreviewText.value = value.slice(0, i);
-        if (i >= value.length) {
-            clearInterval(typewriterTimer);
-            typewriterTimer = setTimeout(() => {
-                typedPreviewText.value = '';
-                i = 0;
-                typewriterTimer = setInterval(type, 40);
-            }, 1500);
-        }
-    };
-    typewriterTimer = setInterval(type, 40);
+function stopPreview() { clearInterval(previewTimer); clearTimeout(previewTimer); }
+
+function showPreviewLine() {
+    stopPreview();
+    const lines = previewLines.value;
+    if (previewIdx.value >= lines.length) previewIdx.value = 0;
+    const value = lines[previewIdx.value];
+    const multi = lines.length > 1;
+    const next = () => { previewIdx.value = (previewIdx.value + 1) % lines.length; showPreviewLine(); };
+    previewAnimKey.value++;
+
+    if (textEffect.value === 'typewriter') {
+        let i = 0;
+        previewShown.value = '';
+        previewTimer = setInterval(() => {
+            i++;
+            previewShown.value = value.slice(0, i);
+            if (i >= value.length) {
+                clearInterval(previewTimer);
+                previewTimer = setTimeout(multi ? next : showPreviewLine, multi ? textInterval.value * 1000 : 1500);
+            }
+        }, 40);
+        return;
+    }
+    previewShown.value = value;
+    if (multi) previewTimer = setTimeout(next, textInterval.value * 1000);
 }
 
-watch([previewText, textEffect], () => {
-    previewAnimKey.value++;
-    if (textEffect.value === 'typewriter') runTypewriterPreview();
-    else { clearInterval(typewriterTimer); clearTimeout(typewriterTimer); }
+watch([previewLines, textEffect, textInterval], () => {
+    previewIdx.value = 0;
+    showPreviewLine();
 }, { immediate: true });
 
-onUnmounted(() => { clearInterval(typewriterTimer); clearTimeout(typewriterTimer); });
+onUnmounted(stopPreview);
 
 async function sendText() {
     if (!text.value.trim()) return;
@@ -268,7 +286,7 @@ async function pushCurrent() {
             <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
             <p class="text-xs text-base-content/60">{{ t('textHint') }}</p>
             <div class="flex gap-2 mt-1 items-start">
-              <textarea v-model="text" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
+              <textarea v-model="text" :placeholder="t('textPlaceholder')" rows="3" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
               <button type="submit" class="btn btn-primary">{{ t('textSubmit') }}</button>
             </div>
 
@@ -277,6 +295,9 @@ async function pushCurrent() {
               <input v-model="textColor" type="color" class="input input-bordered h-10 w-14 p-1" @change="saveTextStyle"/>
               <select v-model="textEffect" class="select select-bordered select-sm flex-1 min-w-0" @change="saveTextStyle">
                 <option v-for="fx in TEXT_EFFECTS" :key="fx.id" :value="fx.id">{{ t(fx.labelKey) }}</option>
+              </select>
+              <select v-model.number="textInterval" class="select select-bordered select-sm" :title="t('textIntervalLabel')" @change="saveTextStyle">
+                <option v-for="n in TEXT_INTERVALS" :key="n" :value="n">{{ t('textIntervalOption', { n }) }}</option>
               </select>
             </div>
           </div>
@@ -297,9 +318,12 @@ async function pushCurrent() {
                    pushes the GIF below it up or down. -->
               <div class="text-bubble-slot">
                 <div class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
-                  {{ textEffect === 'typewriter' ? typedPreviewText : previewText }}
+                  {{ previewShown }}
                 </div>
               </div>
+              <span v-if="previewLines.length > 1" class="text-[10px] text-base-content/50 -mt-1 mb-1">
+                {{ t('textLineCounter', { i: previewIdx + 1, n: previewLines.length }) }}
+              </span>
               <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-36 h-36"/>
             </div>
             <span class="field-label">{{ t('gifCurrent') }}</span>

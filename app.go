@@ -346,6 +346,9 @@ type widgetSettings struct {
 	// (the common case) doesn't need to know the current style.
 	TextColor  string `json:"textColor"`
 	TextEffect string `json:"textEffect"`
+	// Text may hold several lines (one message per line); the widget then
+	// shows them one after another, each for TextInterval seconds.
+	TextInterval int `json:"textInterval"`
 	// Port is only here so the separate "settings" subprocess (main.go's
 	// runSettingsApp, spawned by OpenSettings) can learn which port THIS
 	// process actually bound to - it has no other channel back to this
@@ -396,6 +399,43 @@ func getTextEffect() string {
 		return e
 	}
 	return defaultTextEffect
+}
+
+// Seconds each line stays up when Text has several lines.
+const (
+	defaultTextInterval = 4
+	minTextInterval     = 2
+	maxTextInterval     = 30
+	maxTextLines        = 20
+	maxTextLineRunes    = 200
+)
+
+func getTextInterval() int {
+	if n := getSettings().TextInterval; n >= minTextInterval && n <= maxTextInterval {
+		return n
+	}
+	return defaultTextInterval
+}
+
+// normalizeText turns what the settings page sent into the stored form:
+// one message per line, each trimmed, blank lines dropped, at most
+// maxTextLines lines of maxTextLineRunes characters.
+func normalizeText(raw string) string {
+	var lines []string
+	for _, line := range strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if r := []rune(line); len(r) > maxTextLineRunes {
+			line = string(r[:maxTextLineRunes])
+		}
+		lines = append(lines, line)
+		if len(lines) == maxTextLines {
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // settingsKey is a fixed AES-256 key baked into the binary. This is not
@@ -588,7 +628,7 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 
 	mux.HandleFunc("/text", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			text := strings.TrimSpace(r.FormValue("text"))
+			text := normalizeText(r.FormValue("text"))
 			if text == "" {
 				return
 			}
@@ -617,17 +657,31 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 				http.Error(w, "invalid effect", http.StatusBadRequest)
 				return
 			}
-			if err := saveSettings(func(s *widgetSettings) { s.TextColor = color; s.TextEffect = effect }); err != nil {
+			// interval is optional (older settings pages don't send it)
+			interval := getTextInterval()
+			if raw := strings.TrimSpace(r.FormValue("interval")); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil || n < minTextInterval || n > maxTextInterval {
+					http.Error(w, "invalid interval", http.StatusBadRequest)
+					return
+				}
+				interval = n
+			}
+			if err := saveSettings(func(s *widgetSettings) {
+				s.TextColor = color
+				s.TextEffect = effect
+				s.TextInterval = interval
+			}); err != nil {
 				http.Error(w, "cannot save", http.StatusInternalServerError)
 				return
 			}
-			runtime.EventsEmit(ctx, "server-text-style", map[string]string{"color": color, "effect": effect})
+			runtime.EventsEmit(ctx, "server-text-style", map[string]any{"color": color, "effect": effect, "interval": interval})
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		json.NewEncoder(w).Encode(map[string]string{"color": getTextColor(), "effect": getTextEffect()})
+		json.NewEncoder(w).Encode(map[string]any{"color": getTextColor(), "effect": getTextEffect(), "interval": getTextInterval()})
 	})
 
 	mux.HandleFunc("/gif", func(w http.ResponseWriter, r *http.Request) {

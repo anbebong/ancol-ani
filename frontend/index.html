@@ -140,43 +140,59 @@
     document.getElementById('menu-settings-icon').innerHTML = settingsIcon;
     document.getElementById('menu-cancel-icon').innerHTML = xIcon;
 
-    // Current display style (color + entrance effect), set via the /text/style
-    // config endpoint; applied each time the text itself changes.
+    // Current display style (color + entrance effect + seconds per line), set
+    // via the /text/style config endpoint.
     let textColor = '#ffffff';
     let textEffect = 'none';
-    let typewriterTimer = null;
+    let textInterval = 4;
+
+    // The text may hold several lines (one message each): they are shown one
+    // after another, each for textInterval seconds, the entrance effect
+    // replaying on every change, then it starts over. A single line behaves
+    // as before (static, or typed out again and again for "typewriter").
+    const TYPE_MS = 40;
+    const HOLD_MS = 1500; // pause before retyping a single typewriter line
+    let lines = [];
+    let lineIdx = 0;
+    let typeTimer = null;
+    let rotateTimer = null;
+
+    function stopTimers() {
+        clearInterval(typeTimer);
+        clearTimeout(typeTimer);
+        clearTimeout(rotateTimer);
+    }
 
     function applyStyle(style) {
         if (!style) return;
         if (style.color) textColor = style.color;
         if (style.effect) textEffect = style.effect;
+        if (style.interval) textInterval = Number(style.interval) || textInterval;
         document.getElementById('text-content').style.color = textColor;
     }
 
-    function renderText(value) {
+    function showCurrentLine() {
+        stopTimers();
         const el = document.getElementById('text-content');
-        clearInterval(typewriterTimer);
         el.classList.remove('fx-fade', 'fx-bounce', 'fx-shake');
+        if (!lines.length) { el.textContent = ''; return; }
+
+        const value = lines[lineIdx];
+        const multi = lines.length > 1;
+        const next = () => { lineIdx = (lineIdx + 1) % lines.length; showCurrentLine(); };
 
         if (textEffect === 'typewriter') {
-            // Loops: type the full text out, hold it a moment, clear, retype.
-            const TYPE_MS = 40;
-            const HOLD_MS = 1500;
             let i = 0;
-            const type = () => {
+            el.textContent = '';
+            typeTimer = setInterval(() => {
                 i++;
                 el.textContent = value.slice(0, i);
                 if (i >= value.length) {
-                    clearInterval(typewriterTimer);
-                    typewriterTimer = setTimeout(() => {
-                        el.textContent = '';
-                        i = 0;
-                        typewriterTimer = setInterval(type, TYPE_MS);
-                    }, HOLD_MS);
+                    clearInterval(typeTimer);
+                    // several lines: hold, then the next one; one line: hold, retype it
+                    typeTimer = setTimeout(multi ? next : showCurrentLine, multi ? textInterval * 1000 : HOLD_MS);
                 }
-            };
-            el.textContent = '';
-            typewriterTimer = setInterval(type, TYPE_MS);
+            }, TYPE_MS);
             return;
         }
 
@@ -187,17 +203,26 @@
             void el.offsetWidth;
             el.classList.add('fx-' + textEffect);
         }
+        if (multi) rotateTimer = setTimeout(next, textInterval * 1000);
     }
 
     function setText(text) {
-        const value = (text || '').trim();
-        renderText(value);
+        lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+        lineIdx = 0;
         // No bubble at all for empty text instead of an empty box.
-        document.getElementById('text-bubble').classList.toggle('is-empty', !value);
+        document.getElementById('text-bubble').classList.toggle('is-empty', !lines.length);
+        showCurrentLine();
+    }
+
+    // A style change (effect / seconds per line) restarts the current line
+    // so it takes effect right away.
+    function onStyle(style) {
+        applyStyle(style);
+        showCurrentLine();
     }
 
     window.runtime.EventsOn('server-text', setText);
-    window.runtime.EventsOn('server-text-style', applyStyle);
+    window.runtime.EventsOn('server-text-style', onStyle);
 
     // This page is served by Wails on its own origin, not by the Go local
     // server, so fetches to it need an absolute URL. The port comes from
