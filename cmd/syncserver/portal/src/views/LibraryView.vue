@@ -7,6 +7,7 @@ import Icon from '@ui/components/Icon.vue';
 import Pager from '@ui/components/Pager.vue';
 import GifImage from '../components/GifImage.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import StarButton from '@ui/components/StarButton.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -162,9 +163,10 @@ function onDrop(e) {
         <div class="card-body p-4 gap-3">
           <div class="relative flex justify-center">
             <GifImage :cache-key="'me:' + g.id" :path="`/me/gifs/${g.id}/image`" size="w-full h-36"/>
-            <span class="badge badge-sm absolute top-2 right-2" :class="g.isPublic ? 'badge-success' : 'badge-neutral'">
+            <span class="badge badge-sm absolute top-2 left-2" :class="g.isPublic ? 'badge-success' : 'badge-neutral'">
               {{ g.isPublic ? 'công khai' : 'riêng tư' }}
             </span>
+            <StarButton v-if="g.isPublic" readonly class="star-overlay" :count="g.stars || 0" title="Số người đã star GIF này"/>
           </div>
 
           <template v-if="g.isPublic">

@@ -3,6 +3,7 @@ import { ref, onMounted, watch } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import Pager from '@ui/components/Pager.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import StarButton from '@ui/components/StarButton.vue';
 import { confirmDialog } from '@ui/modal.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
@@ -11,6 +12,7 @@ import { toast, toastError } from '../toast.js';
 
 const q = ref('');
 const user = ref('');
+const sort = ref('new'); // 'new' | 'stars'
 const items = ref([]);
 const total = ref(0);
 const page = ref(1);
@@ -22,6 +24,7 @@ async function load(p = page.value) {
     const params = new URLSearchParams({ page: p, pageSize: PAGE_SIZE });
     if (q.value.trim()) params.set('q', q.value.trim());
     if (user.value.trim()) params.set('user', user.value.trim());
+    if (sort.value === 'stars') params.set('sort', 'stars');
     try {
         const res = await serverApi('/public?' + params.toString());
         const data = await res.json();
@@ -41,7 +44,25 @@ watch([q, user], () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => load(1), 250);
 });
+watch(sort, () => load(1));
 onMounted(() => load(1));
+
+// GitHub-style star: one per user per GIF, toggled on the card.
+const starBusy = ref({});
+async function toggleStar(e) {
+    if (starBusy.value[e.slug]) return;
+    starBusy.value[e.slug] = true;
+    try {
+        const res = await serverApi(`/public/${e.slug}/star`, { method: e.starred ? 'DELETE' : 'POST' });
+        const data = await res.json();
+        e.stars = data.stars;
+        e.starred = data.starred;
+    } catch (err) {
+        if (err.message !== '401') toastError(err);
+    } finally {
+        starBusy.value[e.slug] = false;
+    }
+}
 
 async function use(e) {
     if (!(await confirmDialog(t('confirmPull'), { confirmText: t('useThis'), cancelText: t('modalCancel') }))) return;
@@ -67,6 +88,10 @@ async function use(e) {
         <Icon name="user" class="opacity-50"/>
         <input v-model="user" type="text" :placeholder="t('userFilterPlaceholder')" class="grow bg-transparent"/>
       </label>
+      <select v-model="sort" class="select select-bordered select-sm" :title="t('sortLabel')">
+        <option value="new">{{ t('sortNew') }}</option>
+        <option value="stars">{{ t('sortStars') }}</option>
+      </select>
     </div>
 
     <div v-if="loading" class="flex justify-center py-12"><span class="loading loading-spinner loading-lg text-primary"></span></div>
@@ -79,7 +104,11 @@ async function use(e) {
     <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
       <div v-for="e in items" :key="e.slug" class="card bg-base-100 gif-card">
         <div class="card-body p-3 gap-2">
-          <GifCanvas :load="() => cachedGif('public:' + e.slug, '/public/' + e.slug)" :cache-key="'public:' + e.slug" size="w-full h-32"/>
+          <div class="relative">
+            <GifCanvas :load="() => cachedGif('public:' + e.slug, '/public/' + e.slug)" :cache-key="'public:' + e.slug" size="w-full h-32"/>
+            <StarButton class="star-overlay" :starred="e.starred" :count="e.stars || 0" :busy="!!starBusy[e.slug]"
+              :title="e.starred ? t('unstarTitle') : t('starTitle')" @toggle="toggleStar(e)"/>
+          </div>
           <div class="min-w-0">
             <p class="font-bold text-sm truncate">{{ e.name }}</p>
             <p v-if="e.tags" class="text-xs text-secondary truncate">{{ tagList(e.tags) }}</p>

@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import Pager from '@ui/components/Pager.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import StarButton from '@ui/components/StarButton.vue';
 import { confirmDialog } from '@ui/modal.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
@@ -150,9 +151,10 @@ function onDrop(e) {
         <div class="card-body p-4 gap-3">
           <div class="relative flex justify-center">
             <GifCanvas :load="() => cachedGif('me:' + g.id, `/me/gifs/${g.id}/image`)" :cache-key="'me:' + g.id" size="w-full h-36"/>
-            <span class="badge badge-sm absolute top-2 right-2" :class="g.isPublic ? 'badge-success' : 'badge-neutral'">
+            <span class="badge badge-sm absolute top-2 left-2" :class="g.isPublic ? 'badge-success' : 'badge-neutral'">
               {{ g.isPublic ? t('badgePublic') : t('badgePrivate') }}
             </span>
+            <StarButton v-if="g.isPublic" readonly class="star-overlay" :count="g.stars || 0" :title="t('starsReceived')"/>
           </div>
 
           <button class="btn btn-primary btn-sm gap-1" @click="use(g)"><Icon name="download"/> {{ t('useThis') }}</button>

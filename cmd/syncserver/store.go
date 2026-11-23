@@ -45,6 +45,7 @@ type GifMeta struct {
 	Tags      string `db:"tags" json:"tags"`
 	CreatedAt string `db:"created_at" json:"createdAt"`
 	UpdatedAt string `db:"updated_at" json:"updatedAt"`
+	Stars     int64  `db:"stars" json:"stars"` // stars received (kept while unshared)
 }
 
 type PublicEntry struct {
@@ -53,15 +54,8 @@ type PublicEntry struct {
 	Name      string `db:"name" json:"name"`
 	Tags      string `db:"tags" json:"tags"`
 	UpdatedAt string `db:"updated_at" json:"updatedAt"`
-}
-
-// ShareHistoryEntry is one share/unshare cycle for a gif slot. SharedAt
-// is always set, UnsharedAt is empty while the share is still active.
-type ShareHistoryEntry struct {
-	GifID      int64  `db:"gif_id" json:"gifId"`
-	Slug       string `db:"slug" json:"slug"`
-	SharedAt   string `db:"shared_at" json:"sharedAt"`
-	UnsharedAt string `db:"unshared_at" json:"unsharedAt"`
+	Stars     int64  `db:"stars" json:"stars"`
+	Starred   bool   `db:"starred" json:"starred"` // by the user asking
 }
 
 // Store wraps the DB connection. All queries use sqlx named-query syntax
@@ -124,6 +118,14 @@ func (s *Store) migrate() error {
 				shared_at   TEXT NOT NULL DEFAULT (datetime('now')),
 				unshared_at TEXT
 			);
+			-- GitHub-style stars on public GIFs: one row per (user, gif).
+			CREATE TABLE IF NOT EXISTS gif_stars (
+				user_id    INTEGER NOT NULL REFERENCES users(id),
+				gif_id     INTEGER NOT NULL REFERENCES gifs(id),
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				PRIMARY KEY (user_id, gif_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_gif_stars_gif ON gif_stars(gif_id);
 		`)
 		if err != nil {
 			return err
@@ -171,6 +173,13 @@ func (s *Store) migrate() error {
 				shared_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 				unshared_at TIMESTAMPTZ
 			);
+			CREATE TABLE IF NOT EXISTS gif_stars (
+				user_id    BIGINT NOT NULL REFERENCES users(id),
+				gif_id     BIGINT NOT NULL REFERENCES gifs(id),
+				created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+				PRIMARY KEY (user_id, gif_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_gif_stars_gif ON gif_stars(gif_id);
 			ALTER TABLE gifs ADD COLUMN IF NOT EXISTS name TEXT;
 			ALTER TABLE gifs ADD COLUMN IF NOT EXISTS tags TEXT;
 		`)
@@ -255,6 +264,10 @@ func (s *Store) DeleteUser(id int64) error {
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(tx.Rebind(`DELETE FROM share_history WHERE user_id = ?`), id); err != nil {
+		return err
+	}
+	// stars this user gave, and stars on this user's GIFs
+	if _, err := tx.Exec(tx.Rebind(`DELETE FROM gif_stars WHERE user_id = ? OR gif_id IN (SELECT id FROM gifs WHERE user_id = ?)`), id, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(tx.Rebind(`DELETE FROM gifs WHERE user_id = ?`), id); err != nil {
@@ -430,7 +443,8 @@ func (s *Store) ListGifs(userID int64, limit, offset int) ([]GifMeta, int64, err
 	err := s.db.Select(&gifs, s.db.Rebind(`
 		SELECT id, is_public, COALESCE(slug, '') AS slug,
 		       COALESCE(name, '') AS name, COALESCE(tags, '') AS tags,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       (SELECT COUNT(*) FROM gif_stars st WHERE st.gif_id = gifs.id) AS stars
 		FROM gifs WHERE user_id = ? ORDER BY created_at ASC
 		LIMIT ? OFFSET ?
 	`), userID, limit, offset)
@@ -452,6 +466,9 @@ func (s *Store) DeleteGif(userID, gifID int64) error {
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(tx.Rebind(`DELETE FROM share_history WHERE gif_id = ?`), gifID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(tx.Rebind(`DELETE FROM gif_stars WHERE gif_id IN (SELECT id FROM gifs WHERE id = ? AND user_id = ?)`), gifID, userID); err != nil {
 		return err
 	}
 	res, err := tx.Exec(tx.Rebind(`DELETE FROM gifs WHERE id = ? AND user_id = ?`), gifID, userID)
@@ -537,16 +554,32 @@ func (s *Store) logUnshare(gifID int64) error {
 	return err
 }
 
-func (s *Store) ListShareHistory(userID int64, limit int) ([]ShareHistoryEntry, error) {
-	entries := []ShareHistoryEntry{}
-	err := s.db.Select(&entries, s.db.Rebind(`
-		SELECT gif_id, slug, shared_at, COALESCE(unshared_at, '') AS unshared_at
-		FROM share_history
-		WHERE user_id = ?
-		ORDER BY id DESC
-		LIMIT ?
-	`), userID, limit)
-	return entries, err
+// SetStar stars (on=true) or unstars a public GIF for userID and returns
+// the GIF's star count and whether userID now stars it. Starring twice or
+// unstarring something not starred is a no-op. ErrNotFound when no public
+// GIF has that slug.
+func (s *Store) SetStar(userID int64, slug string, on bool) (stars int64, starred bool, err error) {
+	var gifID int64
+	err = s.db.Get(&gifID, s.db.Rebind(`SELECT id FROM gifs WHERE slug = ? AND is_public = 1`), slug)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, ErrNotFound
+	}
+	if err != nil {
+		return 0, false, err
+	}
+
+	if on {
+		_, err = s.db.Exec(s.db.Rebind(`INSERT INTO gif_stars (user_id, gif_id) VALUES (?, ?) ON CONFLICT DO NOTHING`), userID, gifID)
+	} else {
+		_, err = s.db.Exec(s.db.Rebind(`DELETE FROM gif_stars WHERE user_id = ? AND gif_id = ?`), userID, gifID)
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if err = s.db.Get(&stars, s.db.Rebind(`SELECT COUNT(*) FROM gif_stars WHERE gif_id = ?`), gifID); err != nil {
+		return 0, false, err
+	}
+	return stars, on, nil
 }
 
 func (s *Store) GetPublicBySlug(slug string) ([]byte, error) {
@@ -563,7 +596,10 @@ func (s *Store) GetPublicBySlug(slug string) ([]byte, error) {
 // publisher username (user). Both filters are optional and combine with
 // AND. Returns the page plus the total count matching the same filters
 // (for a page X/Y indicator).
-func (s *Store) ListPublic(limit, offset int, q, user string) ([]PublicEntry, int64, error) {
+// ListPublic lists public GIFs with their star count and whether viewerID
+// starred each one. sort "stars" puts the most-starred first (newest
+// first among ties); anything else is newest first.
+func (s *Store) ListPublic(viewerID int64, limit, offset int, q, user, sort string) ([]PublicEntry, int64, error) {
 	where := `WHERE g.is_public = 1`
 	args := []any{}
 	if q != "" {
@@ -576,14 +612,22 @@ func (s *Store) ListPublic(limit, offset int, q, user string) ([]PublicEntry, in
 		args = append(args, user)
 	}
 
+	order := `g.updated_at DESC`
+	if sort == "stars" {
+		order = `stars DESC, g.updated_at DESC`
+	}
+
 	entries := []PublicEntry{}
 	listQuery := `
-		SELECT g.slug, u.username, COALESCE(g.name, '') AS name, COALESCE(g.tags, '') AS tags, g.updated_at
+		SELECT g.slug, u.username, COALESCE(g.name, '') AS name, COALESCE(g.tags, '') AS tags, g.updated_at,
+		       (SELECT COUNT(*) FROM gif_stars st WHERE st.gif_id = g.id) AS stars,
+		       EXISTS (SELECT 1 FROM gif_stars st WHERE st.gif_id = g.id AND st.user_id = ?) AS starred
 		FROM gifs g JOIN users u ON u.id = g.user_id
 		` + where + `
-		ORDER BY g.updated_at DESC LIMIT ? OFFSET ?
+		ORDER BY ` + order + ` LIMIT ? OFFSET ?
 	`
-	listArgs := append(append([]any{}, args...), limit, offset)
+	// viewerID's placeholder comes first (it's in the SELECT list)
+	listArgs := append(append([]any{viewerID}, args...), limit, offset)
 	if err := s.db.Select(&entries, s.db.Rebind(listQuery), listArgs...); err != nil {
 		return nil, 0, err
 	}

@@ -23,7 +23,6 @@ watch(() => session.token, (t) => { if (t) loadMe().catch(() => {}); }, { immedi
 const links = computed(() => {
     const base = [
         { to: '/library', label: 'Thư viện', icon: 'images' },
-        { to: '/history', label: 'Lịch sử', icon: 'history' },
         { to: '/gallery', label: 'Khám phá', icon: 'compass' },
         { to: '/tools', label: 'Công cụ GIF', icon: 'wand-2' },
     ];

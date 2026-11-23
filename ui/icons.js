@@ -41,6 +41,8 @@ import rotateCw from 'lucide-static/icons/rotate-cw.svg?raw';
 import flipHorizontal from 'lucide-static/icons/flip-horizontal.svg?raw';
 import flipVertical from 'lucide-static/icons/flip-vertical.svg?raw';
 import refreshCw from 'lucide-static/icons/refresh-cw.svg?raw';
+import chevronDown from 'lucide-static/icons/chevron-down.svg?raw';
+import star from 'lucide-static/icons/star.svg?raw';
 
 // Raw lucide SVG markup by name, rendered through <Icon name="..."/>.
 // Shared by the server portal and the client's local settings page.
@@ -55,5 +57,5 @@ export const ICONS = {
     'external-link': externalLink, server, sparkles, tag, square, power, github, x,
     'wand-2': wandSparkles, 'arrow-left': arrowLeft, 'rotate-cw': rotateCw,
     'flip-horizontal': flipHorizontal, 'flip-vertical': flipVertical,
-    'refresh-cw': refreshCw,
+    'refresh-cw': refreshCw, 'chevron-down': chevronDown, star,
 };

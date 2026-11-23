@@ -119,7 +119,6 @@ func main() {
 	mux.HandleFunc("/me", s.withCORS(s.requireAuth(s.handleMe)))
 	mux.HandleFunc("/me/password", s.withCORS(s.requireAuth(s.handleChangePassword)))
 
-	mux.HandleFunc("/me/gif/history", s.withCORS(s.requireAuth(s.handleMyShareHistory)))
 
 	// GIF library: up to the user's quota, each independently shareable.
 	mux.HandleFunc("/me/gifs", s.withCORS(s.dispatchMyGifsRoot))

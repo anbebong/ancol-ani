@@ -375,25 +375,17 @@ func (s *server) handleUnshareGif(w http.ResponseWriter, r *http.Request, userID
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) handleMyShareHistory(w http.ResponseWriter, r *http.Request, userID int64) {
-	entries, err := s.store.ListShareHistory(userID, 50)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entries)
-}
 
 // handlePublicList supports ?q= (free-text over name+tags) and ?user=
 // (exact publisher username), so anyone can search by tag or by who
 // shared it, plus ?page=/?pageSize= pagination.
-func (s *server) handlePublicList(w http.ResponseWriter, r *http.Request, _ int64) {
+func (s *server) handlePublicList(w http.ResponseWriter, r *http.Request, userID int64) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	user := strings.TrimSpace(r.URL.Query().Get("user"))
+	sort := r.URL.Query().Get("sort") // "stars" = most starred first
 	page, pageSize, offset := parsePagination(r)
 
-	entries, total, err := s.store.ListPublic(pageSize, offset, q, user)
+	entries, total, err := s.store.ListPublic(userID, pageSize, offset, q, user, sort)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -419,8 +411,37 @@ func normalizeTags(raw string) string {
 	return strings.Join(out, ",")
 }
 
-func (s *server) handlePublicItem(w http.ResponseWriter, r *http.Request, _ int64) {
-	slug := r.URL.Path[len("/public/"):]
+// handlePublicItem serves /public/{slug} (GET: the image) and
+// /public/{slug}/star (POST: star, DELETE: unstar - GitHub-style, one star
+// per user per GIF; responds {stars, starred}).
+func (s *server) handlePublicItem(w http.ResponseWriter, r *http.Request, userID int64) {
+	rest := r.URL.Path[len("/public/"):]
+	if slug, ok := strings.CutSuffix(rest, "/star"); ok {
+		var on bool
+		switch r.Method {
+		case http.MethodPost:
+			on = true
+		case http.MethodDelete:
+			on = false
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		stars, starred, err := s.store.SetStar(userID, slug, on)
+		if err == ErrNotFound {
+			http.Error(w, "khong tim thay gif cong khai", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"stars": stars, "starred": starred})
+		return
+	}
+
+	slug := rest
 	data, err := s.store.GetPublicBySlug(slug)
 	if err == ErrNotFound {
 		http.Error(w, "not found", http.StatusNotFound)

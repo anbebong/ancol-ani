@@ -6,6 +6,7 @@ import Icon from '@ui/components/Icon.vue';
 import Pager from '@ui/components/Pager.vue';
 import GifImage from '../components/GifImage.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
+import StarButton from '@ui/components/StarButton.vue';
 
 const q = ref('');
 const items = ref([]);
@@ -75,12 +76,14 @@ async function unpublish(e) {
     <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
       <div v-for="e in items" :key="e.slug" class="card bg-base-100 gif-card">
         <div class="card-body p-3 gap-2">
-          <GifImage :cache-key="'public:' + e.slug" :path="'/public/' + e.slug" size="w-full h-32"/>
+          <div class="relative">
+            <GifImage :cache-key="'public:' + e.slug" :path="'/public/' + e.slug" size="w-full h-32"/>
+            <StarButton readonly class="star-overlay" :count="e.stars || 0" title="Số star"/>
+          </div>
           <div class="min-w-0">
             <p class="font-bold text-sm truncate">{{ e.name }}</p>
             <p v-if="e.tags" class="text-xs text-secondary truncate">{{ tagList(e.tags) }}</p>
-            <p class="text-xs text-base-content/60 truncate">bởi {{ e.username }} · {{ fmtDate(e.updatedAt) }}</p>
-          </div>
+            <p class="text-xs text-base-content/60 truncate">bởi {{ e.username }} · {{ fmtDate(e.updatedAt) }}</p>          </div>
           <button class="btn btn-error btn-xs gap-1" @click="unpublish(e)"><Icon name="trash-2" :size="12"/> Gỡ public</button>
         </div>
       </div>

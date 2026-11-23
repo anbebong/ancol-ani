@@ -9,7 +9,6 @@ const routes = [
     { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { guestOnly: true, title: 'Đăng nhập' } },
     { path: '/sso', name: 'sso', component: () => import('./views/SsoView.vue'), meta: { title: 'Đăng nhập' } },
     { path: '/library', name: 'library', component: () => import('./views/LibraryView.vue'), meta: { auth: true, title: 'Thư viện của tôi' } },
-    { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue'), meta: { auth: true, title: 'Lịch sử chia sẻ' } },
     { path: '/account', name: 'account', component: () => import('./views/AccountView.vue'), meta: { auth: true, title: 'Tài khoản' } },
     { path: '/gallery', name: 'gallery', component: () => import('./views/GalleryView.vue'), meta: { auth: true, title: 'Khám phá' } },
     { path: '/tools', name: 'tools', component: () => import('./views/ToolsIndexView.vue'), meta: { title: 'Công cụ GIF' } },
