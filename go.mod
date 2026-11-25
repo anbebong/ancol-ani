@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/wailsapp/wails/v2 v2.17.1
 	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.41.0

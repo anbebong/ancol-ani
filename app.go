@@ -354,6 +354,17 @@ type widgetSettings struct {
 	// process actually bound to - it has no other channel back to this
 	// process, since activePort below only lives in that process' memory.
 	Port string `json:"port"`
+	// AdapterEnabled is an explicit on/off switch, separate from whether a
+	// .wasm adapter is imported at all (see wasmsource.go): importing one
+	// only makes it AVAILABLE, it never silently starts overriding
+	// manually typed Text - the user has to deliberately switch to it, and
+	// can switch back to manual without losing the imported adapter/config.
+	AdapterEnabled bool `json:"adapterEnabled"`
+	// ActiveAdapterID: several adapters can be imported at once (see
+	// wasmsource.go's adaptersDir), but only this one actually runs.
+	// Switching it off (AdapterEnabled=false) or an adapter error never
+	// clears this - re-enabling resumes the same one, not nothing.
+	ActiveAdapterID string `json:"activeAdapterId"`
 }
 
 // currentSettings is read by the window-positioning code (main goroutine +
@@ -597,6 +608,14 @@ func (a *App) startup(ctx context.Context) {
 		saveSettings(func(s *widgetSettings) { s.Port = port })
 	}
 	go startLocalServer(ctx, ln)
+
+	// Resumes whatever text adapter (see wasmsource.go) was imported in a
+	// previous run, if any - a no-op if none was.
+	go func() {
+		if err := startWasmAdapter(ctx); err != nil {
+			runtime.LogError(ctx, "startWasmAdapter: "+err.Error())
+		}
+	}()
 }
 
 // Serves the local settings page: type text in, submit, and it shows up
@@ -636,13 +655,19 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 				http.Error(w, "cannot save", http.StatusInternalServerError)
 				return
 			}
-			runtime.EventsEmit(ctx, "server-text", text)
+			// While the adapter is switched on, the widget should only
+			// ever show ITS output, not whatever manual text happens to
+			// be saved underneath - saving still happens above so it's
+			// there waiting once the user switches back to "Thủ công".
+			if !getSettings().AdapterEnabled {
+				emitServerText(ctx, text)
+			}
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Write([]byte(getText()))
+		w.Write([]byte(currentText()))
 	})
 
 	mux.HandleFunc("/text/style", func(w http.ResponseWriter, r *http.Request) {
@@ -726,6 +751,156 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 			return
 		}
 		w.Write(defaultGif)
+	})
+
+	// --- text adapter (see wasmsource.go): an optional .wasm file that
+	// supplies the widget's text itself (API polling, whatever), imported
+	// here instead of needing a rebuilt client per customer/source. ---
+
+	mux.HandleFunc("/text-adapter", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			r.Body = http.MaxBytesReader(w, r.Body, maxWasmAdapterBytes)
+			if err := r.ParseMultipartForm(maxWasmAdapterBytes); err != nil {
+				http.Error(w, "File qua nang (toi da 10MB)", http.StatusRequestEntityTooLarge)
+				return
+			}
+			file, header, err := r.FormFile("wasm")
+			if err != nil {
+				http.Error(w, "missing file", http.StatusBadRequest)
+				return
+			}
+			defer file.Close()
+			raw, err := io.ReadAll(file)
+			if err != nil {
+				http.Error(w, "File qua nang (toi da 10MB)", http.StatusRequestEntityTooLarge)
+				return
+			}
+			id, schema, err := importWasmAdapter(ctx, header.Filename, raw)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]any{"id": id, "schema": json.RawMessage(schema)})
+			return
+
+		case http.MethodDelete:
+			id := strings.TrimSpace(r.URL.Query().Get("id"))
+			if id == "" {
+				http.Error(w, "missing id", http.StatusBadRequest)
+				return
+			}
+			if err := removeAdapterByID(id); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		list, _ := listAdapters()
+		settings := getSettings()
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled":  settings.AdapterEnabled,
+			"activeId": settings.ActiveAdapterID,
+			"error":    lastAdapterErrorString(),
+			"list":     list,
+		})
+	})
+
+	// Switches which imported adapter is actually running, and turns
+	// adapter mode on for it (see selectAdapter in wasmsource.go).
+	mux.HandleFunc("/text-adapter/select", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := strings.TrimSpace(r.FormValue("id"))
+		if id == "" {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+		if err := selectAdapter(ctx, id); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	})
+
+	mux.HandleFunc("/text-adapter/enabled", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		enabled := strings.TrimSpace(r.FormValue("enabled")) == "true"
+		if enabled && getSettings().ActiveAdapterID == "" {
+			http.Error(w, "chưa chọn module nào", http.StatusBadRequest)
+			return
+		}
+		if err := saveSettings(func(s *widgetSettings) { s.AdapterEnabled = enabled }); err != nil {
+			http.Error(w, "cannot save", http.StatusInternalServerError)
+			return
+		}
+		if err := startWasmAdapter(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !enabled {
+			// Switching back to "Thủ công": startWasmAdapter above already
+			// stopped the poll loop and cleared the adapter's last output,
+			// but nothing pushes the now-current (manual) text to the
+			// widget on its own until the next edit - do that now instead
+			// of leaving the adapter's last line on screen.
+			emitServerText(ctx, getText())
+		}
+	})
+
+	mux.HandleFunc("/text-adapter/schema", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.URL.Query().Get("id"))
+		if id == "" {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+		schema, err := currentWasmAdapterSchema(ctx, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Write([]byte(schema))
+	})
+
+	mux.HandleFunc("/text-adapter/config", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimSpace(r.URL.Query().Get("id"))
+		if id == "" {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+
+		if r.Method == http.MethodPost {
+			body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+			if err != nil {
+				http.Error(w, "cannot read body", http.StatusBadRequest)
+				return
+			}
+			var probe map[string]any
+			if json.Unmarshal(body, &probe) != nil {
+				http.Error(w, "invalid json", http.StatusBadRequest)
+				return
+			}
+			if err := saveWasmAdapterConfig(ctx, id, string(body)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if raw, err := os.ReadFile(adapterConfigPath(id)); err == nil {
+			w.Write(raw)
+			return
+		}
+		w.Write([]byte("{}"))
 	})
 
 	mux.HandleFunc("/gif/reset", func(w http.ResponseWriter, r *http.Request) {

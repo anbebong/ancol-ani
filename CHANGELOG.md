@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.11 — 2026-11-25
+
+### Mới
+- Nguồn chữ tự động cho widget: nhập module `.wasm` để widget tự lấy chữ hiển thị (gọi API, v.v.) thay vì gõ tay, chuyển qua lại Thủ công/Tự động, nhiều module cùng lúc nhưng chỉ 1 chạy, tự rơi về Thủ công nếu module lỗi.
+
 ## 1.1.10 — 2026-11-25
 
 ### Sửa lỗi

@@ -61,12 +61,36 @@ async function setCorner(c) {
 // "current text" display - someone who only wants to change color/effect
 // can leave it as-is and just hit Apply, instead of needing to retype it.
 const text = ref('');
+// Set only by the user actually editing the textarea (see @input below) -
+// NOT by focus: the textarea has autofocus, so document.activeElement
+// would be it from the moment the page loads even if nobody touched it,
+// which used to block every single poll refresh forever.
+const textDirty = ref(false);
 async function loadText() {
     try {
         text.value = (await (await fetch('/text')).text()).trim();
+        textDirty.value = false;
     } catch (_) {}
 }
 onMounted(loadText);
+// The widget's text can also change on its own now (an imported .wasm
+// adapter polling in the background, see the automatic text source
+// section below). The Settings window and the widget are two SEPARATE
+// Wails processes (main.go spawns "settings" as its own exe instance, so
+// it can't read the widget's Go state directly either) - a Wails
+// EventsEmit from the widget's process never reaches this window's
+// runtime, so there's no live-push channel here. Polling the plain HTTP
+// endpoint is the only thing that actually crosses that boundary. Only
+// runs while an adapter is active (manual-only mode never changes on its
+// own) and skips refreshing while the user has a half-typed draft they
+// haven't sent yet, so an adapter update never overwrites it.
+let textPoll = null;
+onMounted(() => {
+    textPoll = setInterval(() => {
+        if (adapterEnabled.value && !textDirty.value) loadText();
+    }, 3000);
+});
+onUnmounted(() => clearInterval(textPoll));
 
 // ---------- text display style (color + entrance effect) ----------
 const TEXT_EFFECTS = [
@@ -176,7 +200,163 @@ async function sendText() {
     form.append('text', text.value);
     try {
         await fetch('/text', { method: 'POST', body: form });
+        textDirty.value = false;
         toast(t('toastTextSent'), 'success');
+    } catch (err) {
+        toastError(err);
+    }
+}
+
+// ---------- automatic text source (.wasm adapters) ----------
+// An adapter is a .wasm file (written by whoever sets it up, e.g. for a
+// customer's own notification source) that supplies the widget's text
+// automatically instead of someone typing it in the box above - see
+// wasmsource.go. This app only ever sees: the adapter's own declared
+// config fields (config_schema, used to render the form below) and the
+// text it returns; it never knows what the adapter actually connects to.
+// Several can be imported at once (one per customer/source), but only one
+// is ever ACTIVE+ENABLED - the list below is what the server tracks them
+// as; importing never auto-selects one, the user picks explicitly. If the
+// active one errors mid-poll, the server falls back to "Thủ công" on its
+// own (adapterError below reflects why, until the next successful select).
+const adapterList = ref([]); // [{id, name, active}, ...]
+const adapterEnabled = ref(false);
+const adapterError = ref('');
+const activeAdapterId = computed(() => adapterList.value.find((a) => a.active)?.id || '');
+// Clicking a box in the list just opens ITS config below (viewingAdapterId)
+// - it does NOT switch the widget to it. Only the "Sử dụng" button under
+// the form actually calls applyAdapter(), so looking at/editing a
+// non-active adapter's config can never accidentally take over the widget.
+const viewingAdapterId = ref('');
+const viewingAdapter = computed(() => adapterList.value.find((a) => a.id === viewingAdapterId.value) || null);
+const adapterFields = ref([]); // [{key, label}, ...] from the viewed adapter's config_schema
+// "_interval_sec" is a reserved key an adapter MAY declare in its own
+// config_schema if it wants the poll cycle user-configurable - it's not
+// something every adapter gets shown regardless, so it's rendered
+// specially (numeric input, fixed label) rather than looping it through
+// like an ordinary field, and not shown at all unless the schema has it.
+const hasIntervalField = computed(() => adapterFields.value.some((f) => f.key === '_interval_sec'));
+const nonIntervalFields = computed(() => adapterFields.value.filter((f) => f.key !== '_interval_sec'));
+const adapterConfig = ref({}); // current field values, keyed like adapterFields
+const adapterFileInput = ref(null);
+const adapterBusy = ref(false);
+
+async function loadAdapterStatus() {
+    try {
+        const res = await (await fetch('/text-adapter')).json();
+        adapterList.value = Array.isArray(res.list) ? res.list : [];
+        adapterEnabled.value = !!res.enabled;
+        const prevError = adapterError.value;
+        adapterError.value = res.error || '';
+        // The server just fell back to manual on its own (error appeared,
+        // mode flipped off since the last time we checked) - say so once,
+        // loudly, instead of leaving the user to notice the switch flipped
+        // back by itself.
+        if (adapterError.value && adapterError.value !== prevError) {
+            toast(t('toastAdapterFellBack', { error: adapterError.value }), 'error');
+            loadText();
+        }
+    } catch (_) {}
+}
+onMounted(loadAdapterStatus);
+
+// Opens (or closes, toggling the same box again) an adapter's config panel
+// without applying anything - viewing/editing config is always allowed,
+// regardless of which one is currently active or which mode is on.
+async function viewAdapter(id) {
+    if (viewingAdapterId.value === id) {
+        viewingAdapterId.value = '';
+        return;
+    }
+    viewingAdapterId.value = id;
+    try {
+        const schema = await (await fetch('/text-adapter/schema?id=' + encodeURIComponent(id))).json();
+        adapterFields.value = Array.isArray(schema) ? schema : [];
+        adapterConfig.value = await (await fetch('/text-adapter/config?id=' + encodeURIComponent(id))).json();
+    } catch (_) {
+        adapterFields.value = [];
+        adapterConfig.value = {};
+    }
+}
+
+async function pickAdapterFile(file) {
+    if (!file) return;
+    if (!/\.wasm$/i.test(file.name)) {
+        toast(t('errAdapterWasmOnly'), 'error');
+        return;
+    }
+    adapterBusy.value = true;
+    try {
+        const form = new FormData();
+        form.append('wasm', file);
+        const res = await fetch('/text-adapter', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        toast(t('toastAdapterImported'), 'success');
+        await loadAdapterStatus();
+    } catch (err) {
+        toastError(err);
+    } finally {
+        adapterBusy.value = false;
+        if (adapterFileInput.value) adapterFileInput.value.value = '';
+    }
+}
+
+// The ONLY action that actually switches the widget to a different
+// adapter (and turns adapter mode on for it) - called by the "Sử dụng"
+// button, never by just clicking/viewing a box in the list.
+async function applyAdapter(id) {
+    const form = new FormData();
+    form.append('id', id);
+    try {
+        const res = await fetch('/text-adapter/select', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        await loadAdapterStatus();
+        setTimeout(loadText, 300); // its first poll lands almost immediately
+    } catch (err) {
+        toastError(err);
+    }
+}
+
+// Called by the Thủ công/Tự động buttons - setAdapterEnabled(false) does
+// NOT remove or deselect the active adapter, it just stops the widget
+// from using it for now (the server keeps the file/config/selection).
+async function setAdapterEnabled(enabled) {
+    const form = new FormData();
+    form.append('enabled', String(enabled));
+    try {
+        const res = await fetch('/text-adapter/enabled', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        adapterEnabled.value = enabled;
+        if (enabled) setTimeout(loadText, 300);
+        else loadText();
+    } catch (err) {
+        toastError(err);
+    }
+}
+
+async function saveAdapterConfig() {
+    const id = viewingAdapterId.value;
+    if (!id) return;
+    try {
+        await fetch('/text-adapter/config?id=' + encodeURIComponent(id), { method: 'POST', body: JSON.stringify(adapterConfig.value) });
+        toast(t('toastAdapterConfigSaved'), 'success');
+        // Only this adapter being both active AND enabled means the live
+        // widget is actually running it right now - saving a non-active
+        // one's config never affects what's currently showing.
+        if (adapterEnabled.value && id === activeAdapterId.value) setTimeout(loadText, 300);
+    } catch (err) {
+        toastError(err);
+    }
+}
+
+async function removeAdapter(id) {
+    if (!(await confirmDialog(t('confirmAdapterRemove'), { confirmText: t('adapterRemoveBtn'), cancelText: t('modalCancel') }))) return;
+    try {
+        await fetch('/text-adapter?id=' + encodeURIComponent(id), { method: 'DELETE' });
+        toast(t('toastAdapterRemoved'), 'success');
+        if (viewingAdapterId.value === id) viewingAdapterId.value = '';
+        await loadAdapterStatus();
+        loadText();
     } catch (err) {
         toastError(err);
     }
@@ -300,10 +480,10 @@ async function pushCurrent() {
             </label>
 
             <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
-            <p class="text-xs text-base-content/60">{{ t('textHint') }}</p>
+            <p class="text-xs text-base-content/60">{{ adapterEnabled ? t('textHintDisabledByAdapter') : t('textHint') }}</p>
             <div class="flex gap-2 mt-1 items-start">
-              <textarea v-model="text" :placeholder="t('textPlaceholder')" rows="3" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
-              <button type="submit" class="btn btn-primary">{{ t('textSubmit') }}</button>
+              <textarea v-model="text" @input="textDirty = true" :disabled="adapterEnabled" :placeholder="t('textPlaceholder')" rows="3" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
+              <button type="submit" class="btn btn-primary" :disabled="adapterEnabled">{{ t('textSubmit') }}</button>
             </div>
 
             <h2 class="font-bold flex items-center gap-2 mt-2"><Icon name="sparkles"/> {{ t('textStyleLabel') }}</h2>
@@ -376,6 +556,81 @@ async function pushCurrent() {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Automatic text source (.wasm adapter) -->
+    <div class="card bg-base-100">
+      <div class="card-body gap-4">
+        <h2 class="font-bold flex items-center gap-2"><Icon name="plug"/> {{ t('adapterLabel') }}</h2>
+        <p class="text-xs text-base-content/60">{{ t('adapterHint') }}</p>
+
+        <p v-if="adapterError" class="text-xs text-error">{{ t('adapterFellBackNotice', { error: adapterError }) }}</p>
+
+        <!-- Mode toggle + import button on one row: both are "what governs
+             the whole block below", so they belong together. -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="join">
+            <button type="button" class="join-item btn btn-sm" :class="!adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" @click="setAdapterEnabled(false)">
+              {{ t('adapterModeManual') }}
+            </button>
+            <button type="button" class="join-item btn btn-sm" :class="adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" :disabled="!activeAdapterId" @click="setAdapterEnabled(true)">
+              {{ t('adapterModeAuto') }}
+            </button>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary gap-2" :disabled="adapterBusy" @click="adapterFileInput?.click()">
+            <span v-if="adapterBusy" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else name="upload" :size="16"/> {{ t('adapterImportBtn') }}
+          </button>
+          <input ref="adapterFileInput" type="file" accept=".wasm" class="hidden" @change="pickAdapterFile($event.target.files[0])"/>
+        </div>
+
+        <!-- Which SOURCE is selected - several may be imported, only one
+             of them is ever the active one. Boxes dim when mode is
+             "Thủ công" (the list doesn't matter right now, nothing here
+             is actually running), full color in "Tự động". Clicking a box
+             only opens its config below - it never switches the widget on
+             its own, that's what "Sử dụng" under the form is for. -->
+        <div v-if="adapterList.length" class="flex flex-wrap gap-2" :class="{ 'opacity-40': !adapterEnabled }">
+          <div v-for="a in adapterList" :key="a.id"
+            class="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-md border-2 cursor-pointer"
+            :class="viewingAdapterId === a.id ? 'bg-primary/20 border-primary' : a.active ? 'bg-success/10 border-success' : 'bg-base-200 border-neutral'"
+            :title="`${a.description}\n${t('adapterAuthorLabel')}: ${a.author} - v${a.version}`"
+            @click="viewAdapter(a.id)">
+            <Icon v-if="a.active" name="check" :size="16" class="text-success"/>
+            <span class="font-bold truncate max-w-[10rem]">{{ a.name }}</span>
+            <button type="button" class="btn btn-xs btn-circle btn-error text-white" :title="t('adapterRemoveBtn')" @click.stop="removeAdapter(a.id)">
+              <Icon name="x" :size="14"/>
+            </button>
+          </div>
+        </div>
+        <p v-else class="text-xs text-base-content/60">{{ t('adapterInactive') }}</p>
+
+        <form v-if="viewingAdapter" class="flex flex-col gap-3 p-3 rounded-md border-2 border-neutral" @submit.prevent="saveAdapterConfig">
+          <div class="flex flex-col gap-0.5 pb-2 border-b-2 border-neutral/30">
+            <p class="text-sm">{{ viewingAdapter.description }}</p>
+            <p class="text-xs text-base-content/60">{{ t('adapterAuthorLabel') }}: {{ viewingAdapter.author }} · v{{ viewingAdapter.version }}</p>
+          </div>
+          <p v-if="!adapterFields.length" class="text-xs text-base-content/60">{{ t('adapterNoFields') }}</p>
+          <div v-for="f in nonIntervalFields" :key="f.key" class="flex flex-col gap-1">
+            <label class="text-sm font-bold">{{ f.label || f.key }}</label>
+            <input v-model="adapterConfig[f.key]" type="text" class="input input-bordered input-sm"/>
+          </div>
+          <!-- Only shown if this adapter's own config_schema actually
+               declares "_interval_sec" - an adapter that doesn't want this
+               configurable (uses its own fixed/default cycle) never shows
+               it, instead of a field nobody asked for appearing anyway. -->
+          <div v-if="hasIntervalField" class="flex flex-col gap-1">
+            <label class="text-sm font-bold">{{ t('adapterIntervalLabel') }}</label>
+            <input v-model.number="adapterConfig._interval_sec" type="number" min="2" max="600" class="input input-bordered input-sm w-32"/>
+          </div>
+          <div class="flex gap-2">
+            <button type="submit" class="btn btn-sm btn-ghost border-2 border-neutral">{{ t('adapterSaveConfigBtn') }}</button>
+            <button type="button" class="btn btn-sm btn-primary" :disabled="viewingAdapterId === activeAdapterId && adapterEnabled" @click="applyAdapter(viewingAdapterId)">
+              {{ t('adapterUseBtn') }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
