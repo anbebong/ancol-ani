@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.9 — 2026-11-25
+
+### Sửa lỗi
+- Header/tabs của trang Settings và portal server giờ cố định hẳn, chỉ phần nội dung bên dưới cuộn riêng — trước đó cả trang cuộn chung nên khi chuyển trang dài/ngắn layout bị lệch sang trái/phải vài px.
+
 ## 1.1.8 — 2026-11-21
 
 ### Mới

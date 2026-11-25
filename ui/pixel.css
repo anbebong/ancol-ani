@@ -4,12 +4,13 @@
    panels with a hard offset shadow instead of blur, square-ish corners.
    Colors are the "pixel" daisyUI theme in ui/tailwind.shared.cjs. */
 
-/* Always reserve the vertical scrollbar's width. Without it, pages taller
-   than the window get a scrollbar and the centered layout shifts ~7px
-   left, so switching between a long page (Widget, What's new) and a short
-   one (Explore) made the content visibly jump sideways. */
-html {
-  scrollbar-gutter: stable;
+/* html/body never scroll - .app-shell below owns the viewport height and
+   only its .app-scroll child scrolls. That keeps the header a true fixed
+   region instead of a sticky one riding the document scroll, so it can
+   never visually shift relative to the content underneath it. */
+html, body {
+  height: 100%;
+  overflow: hidden;
 }
 
 :root {
@@ -76,10 +77,25 @@ body {
 
 /* ---------- app shell ---------- */
 
+/* Outer shell: fixed to the viewport height, column layout. .app-header
+   sits in normal flow (never scrolls, never moves) and .app-scroll takes
+   the remaining height and owns its own scrollbar. */
+.app-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-scroll {
+  flex: 1;
+  min-height: 0; /* let a flex child actually shrink and scroll instead of overflowing the shell */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
+  flex-shrink: 0;
   background: rgba(20, 20, 43, 0.92);
   backdrop-filter: blur(6px);
   border-bottom: 2px solid #35335a;
@@ -240,6 +256,8 @@ body {
 
 .auth-screen {
   min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
   display: flex;
   align-items: center;
   justify-content: center;

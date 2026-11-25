@@ -50,7 +50,7 @@ async function reloadPage() {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div class="app-shell">
     <header class="app-header">
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/" class="flex items-end gap-0 shrink-0">
@@ -92,24 +92,26 @@ async function reloadPage() {
       </nav>
     </header>
 
-    <main class="max-w-5xl w-full mx-auto px-4 py-8 flex-1">
-      <RouterView v-slot="{ Component, route }">
-        <component :is="Component" :key="route.path + ':' + reloadKey"/>
-      </RouterView>
-    </main>
+    <div class="app-scroll">
+      <main class="max-w-5xl w-full mx-auto px-4 py-8 flex-1">
+        <RouterView v-slot="{ Component, route }">
+          <component :is="Component" :key="route.path + ':' + reloadKey"/>
+        </RouterView>
+      </main>
 
-    <footer class="flex items-center justify-center gap-1.5 text-xs text-base-content/50 pb-6">
-      <span class="inline-flex items-center gap-1">
-        <Icon name="github" :size="14"/> anbebong
-      </span>
-      <RouterLink v-if="appInfo.version" :to="{ path: '/changelog', query: { section: 'version' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('navChangelog')">
-        · v{{ appInfo.version }}
-        <span v-if="hasUnseenUpdate" class="nav-dot"></span>
-      </RouterLink>
-      <RouterLink :to="{ path: '/changelog', query: { section: 'policy' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('footerPolicy')">
-        · {{ t('footerPolicy') }}
-      </RouterLink>
-    </footer>
+      <footer class="flex items-center justify-center gap-1.5 text-xs text-base-content/50 pb-6">
+        <span class="inline-flex items-center gap-1">
+          <Icon name="github" :size="14"/> anbebong
+        </span>
+        <RouterLink v-if="appInfo.version" :to="{ path: '/changelog', query: { section: 'version' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('navChangelog')">
+          · v{{ appInfo.version }}
+          <span v-if="hasUnseenUpdate" class="nav-dot"></span>
+        </RouterLink>
+        <RouterLink :to="{ path: '/changelog', query: { section: 'policy' } }" class="inline-flex items-center gap-1 hover:text-base-content" :title="t('footerPolicy')">
+          · {{ t('footerPolicy') }}
+        </RouterLink>
+      </footer>
+    </div>
 
     <div class="app-toast" :class="{ 'is-visible': toastState.visible, 'is-success': toastState.kind === 'success', 'is-error': toastState.kind === 'error' }" role="status">
       {{ toastState.message }}

@@ -42,7 +42,7 @@ async function logout() {
 </script>
 
 <template>
-  <div v-if="showShell" class="min-h-screen flex flex-col">
+  <div v-if="showShell" class="app-shell">
     <header class="app-header">
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/library" class="flex items-end gap-0 shrink-0">
@@ -82,9 +82,11 @@ async function logout() {
       </nav>
     </header>
 
-    <main class="max-w-5xl w-full mx-auto px-4 py-8 flex-1">
-      <RouterView/>
-    </main>
+    <div class="app-scroll">
+      <main class="max-w-5xl w-full mx-auto px-4 py-8 flex-1">
+        <RouterView/>
+      </main>
+    </div>
   </div>
 
   <RouterView v-else/>
