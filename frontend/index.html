@@ -22,8 +22,10 @@
            panel, white text, purple border) so it stays readable on any
            desktop wallpaper - the old red text with a yellow outline was
            hard to read on both light and dark backgrounds. The panel is
-           only 30px tall: up to 2 lines of 10px text + the tail, longer
-           text is cut with an ellipsis. */
+           only 30px tall: up to 2 lines of 10px text + the tail. A single
+           entered line too long to fit those 2 lines is auto-split into
+           several rotated messages instead of being cut off - see
+           splitToFit() below. */
         #text-panel {
             width: 70px;
             height: 30px;
@@ -133,6 +135,7 @@
 </div>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
+    import { splitToFit, makeFitsWithinLines, contentWidthOf } from '../ui/text-fit.js';
     import '../ui/text-effects.css';
     import settingsIcon from 'lucide-static/icons/settings.svg?raw';
     import xIcon from 'lucide-static/icons/x.svg?raw';
@@ -206,8 +209,22 @@
         if (multi) rotateTimer = setTimeout(next, textInterval * 1000);
     }
 
+    // Canvas-measured fit check (see ui/text-fit.js) - width/font copied
+    // from #text-bubble/#text-content's actual computed style at runtime
+    // (never hardcoded), so it can't drift out of sync with the CSS above.
+    const bubbleStyle = getComputedStyle(document.getElementById('text-bubble'));
+    const contentStyle = getComputedStyle(document.getElementById('text-content'));
+    const contentWidthPx = contentWidthOf(bubbleStyle);
+    const fontCss = `${contentStyle.fontWeight} ${contentStyle.fontSize} ${contentStyle.fontFamily}`;
+    const fitsTwoLines = makeFitsWithinLines(fontCss, contentWidthPx, 2); // 2 = the bubble's -webkit-line-clamp
+
     function setText(text) {
-        lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+        // A single line the user typed may be too long for the 2-line
+        // bubble. Instead of silently clamping it with an ellipsis, split
+        // it into several chunks - each becomes its own rotated message,
+        // same as if the user had pressed Enter between them.
+        const entered = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+        lines = entered.flatMap((l) => splitToFit(l, fitsTwoLines));
         lineIdx = 0;
         // No bubble at all for empty text instead of an empty box.
         document.getElementById('text-bubble').classList.toggle('is-empty', !lines.length);

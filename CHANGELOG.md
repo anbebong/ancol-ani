@@ -6,6 +6,11 @@ Phiên bản đang chạy hiện ở chân trang settings và ở trang **Về A
 Mỗi phiên bản là một mục `## <version> — <ngày>`, chia thành `### Mới`, `### Thay đổi`, `### Sửa lỗi`.
 Trang **Về Ancol-Ani** của app đọc trực tiếp file này, nên giữ đúng định dạng đó.
 
+## 1.1.10 — 2026-11-25
+
+### Sửa lỗi
+- Chữ hiển thị trên widget quá dài giờ tự tách thành nhiều câu xoay vòng thay vì bị cắt "..." — khớp đúng với phần xem trước ở trang Settings.
+
 ## 1.1.9 — 2026-11-25
 
 ### Sửa lỗi

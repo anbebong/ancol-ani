@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { confirmDialog } from '@ui/modal.js';
+import { splitToFit, makeFitsWithinLines, contentWidthOf } from '@ui/text-fit.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
 import { account, serverApi } from '../account.js';
@@ -106,10 +107,36 @@ async function saveTextStyle() {
 // preview below, so changing color/effect/text shows the result
 // immediately instead of only after it's saved and shown on the widget.
 // One message per line; the widget shows them one after another. The
-// preview runs the same rotation (same timings as frontend/index.html).
+// preview runs the same rotation (same timings as frontend/index.html),
+// including splitting a line too long for the bubble into several
+// messages (splitToFit, shared with the widget via ui/text-fit.js) so the
+// "x/y" counter below matches what the widget will actually rotate
+// through.
+// Canvas-measured fit check (see ui/text-fit.js) - font/width/line budget
+// read once from the real bubble node's resolved CSS (max-width minus its
+// own padding for the width, max-height / line-height for how many lines
+// fit), not hardcoded, so it tracks the .text-bubble-preview rule below.
+const bubbleRef = ref(null);
+const measurerReady = ref(false);
+let fitsPreviewLine = () => true;
+
+onMounted(() => {
+    const el = bubbleRef.value;
+    if (!el) return;
+    const style = getComputedStyle(el);
+    const widthPx = contentWidthOf(style);
+    const maxLines = Math.floor(parseFloat(style.maxHeight) / parseFloat(style.lineHeight) + 1e-6);
+    const fontCss = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+    fitsPreviewLine = makeFitsWithinLines(fontCss, widthPx, maxLines);
+    measurerReady.value = true;
+});
+
 const previewLines = computed(() => {
-    const lines = text.value.split('\n').map((l) => l.trim()).filter(Boolean);
-    return lines.length ? lines : [t('textPreviewPlaceholder')];
+    const entered = text.value.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!entered.length) return [t('textPreviewPlaceholder')];
+    if (!measurerReady.value) return entered;
+    return entered.flatMap((l) => splitToFit(l, fitsPreviewLine));
 });
 const previewIdx = ref(0);
 const previewShown = ref('');
@@ -317,7 +344,7 @@ async function pushCurrent() {
                    length, line wraps, the bounce/shake transforms) never
                    pushes the GIF below it up or down. -->
               <div class="text-bubble-slot">
-                <div class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
+                <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
                   {{ previewShown }}
                 </div>
               </div>
