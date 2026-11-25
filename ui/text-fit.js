@@ -3,6 +3,19 @@
 // user-entered text into several chunks that each fit the speech bubble,
 // instead of letting the overflow get clipped/ellipsised.
 
+// The real widget's #text-bubble box model (frontend/index.html), as a
+// single source of truth. The preview bubble in WidgetView.vue is shown
+// bigger for readability, but how many characters fit per line must match
+// what the ACTUAL widget does - not whatever size the preview happens to
+// render at. So both call sites compute the fit check from these numbers
+// (never from the preview element's own, larger, CSS), and only the
+// preview's *visual* CSS is free to differ.
+export const WIDGET_BUBBLE = {
+    contentWidthPx: 68 - 4 * 2 - 1.5 * 2, // max-width - padding-x - border-x (border-box)
+    fontCss: '700 10px "Segoe UI", system-ui, sans-serif',
+    maxLines: 2, // #text-content's -webkit-line-clamp
+};
+
 // Counts how many lines `text` would wrap into at `maxWidthPx`, replicating
 // CSS `word-break: break-word`: words are kept whole unless a single word
 // alone is wider than maxWidthPx, in which case it's broken character by

@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from '@ui/components/Icon.vue';
 import PageHeader from '@ui/components/PageHeader.vue';
 import { confirmDialog } from '@ui/modal.js';
-import { splitToFit, makeFitsWithinLines, contentWidthOf } from '@ui/text-fit.js';
+import { splitToFit, makeFitsWithinLines, WIDGET_BUBBLE } from '@ui/text-fit.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
 import { account, serverApi } from '../account.js';
@@ -112,25 +112,14 @@ async function saveTextStyle() {
 // messages (splitToFit, shared with the widget via ui/text-fit.js) so the
 // "x/y" counter below matches what the widget will actually rotate
 // through.
-// Canvas-measured fit check (see ui/text-fit.js) - font/width/line budget
-// read once from the real bubble node's resolved CSS (max-width minus its
-// own padding for the width, max-height / line-height for how many lines
-// fit), not hardcoded, so it tracks the .text-bubble-preview rule below.
+// Canvas-measured fit check (see ui/text-fit.js) - uses WIDGET_BUBBLE, the
+// REAL widget's own box model, not this preview's (bigger, for readability)
+// CSS. Otherwise the preview's wider/taller box would let more text fit per
+// line than the actual widget does, splitting differently from what the
+// user will really see.
 const bubbleRef = ref(null);
-const measurerReady = ref(false);
-let fitsPreviewLine = () => true;
-
-onMounted(() => {
-    const el = bubbleRef.value;
-    if (!el) return;
-    const style = getComputedStyle(el);
-    const widthPx = contentWidthOf(style);
-    const maxLines = Math.floor(parseFloat(style.maxHeight) / parseFloat(style.lineHeight) + 1e-6);
-    const fontCss = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-
-    fitsPreviewLine = makeFitsWithinLines(fontCss, widthPx, maxLines);
-    measurerReady.value = true;
-});
+const measurerReady = ref(true);
+const fitsPreviewLine = makeFitsWithinLines(WIDGET_BUBBLE.fontCss, WIDGET_BUBBLE.contentWidthPx, WIDGET_BUBBLE.maxLines);
 
 const previewLines = computed(() => {
     const entered = text.value.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -340,18 +329,21 @@ async function pushCurrent() {
         <div class="flex flex-col sm:flex-row gap-5">
           <div class="flex flex-col items-center gap-2 shrink-0">
             <div class="flex flex-col items-center">
-              <!-- Fixed-height slot so the bubble's own size changing (text
-                   length, line wraps, the bounce/shake transforms) never
-                   pushes the GIF below it up or down. -->
-              <div class="text-bubble-slot">
-                <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
-                  {{ previewShown }}
+              <!-- One single 70x100 (w x h) block, same shape as the real
+                   widget window: text panel stacked directly on top of the
+                   GIF, no gap, nothing in between - this IS the widget's
+                   whole screen, just scaled up for readability. -->
+              <div class="widget-replica">
+                <div class="text-bubble-slot">
+                  <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
+                    {{ previewShown }}
+                  </div>
                 </div>
+                <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-28 h-28"/>
               </div>
-              <span v-if="previewLines.length > 1" class="text-[10px] text-base-content/50 -mt-1 mb-1">
+              <span v-if="previewLines.length > 1" class="text-[10px] text-base-content/50 mt-1">
                 {{ t('textLineCounter', { i: previewIdx + 1, n: previewLines.length }) }}
               </span>
-              <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-36 h-36"/>
             </div>
             <span class="field-label">{{ t('gifCurrent') }}</span>
           </div>
@@ -392,28 +384,57 @@ async function pushCurrent() {
 <style scoped>
 /* Mirrors the widget's own #text-bubble (frontend/index.html) so the
    preview here matches what actually shows on screen, just bigger. */
+.widget-replica {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 .text-bubble-slot {
+  /* Real widget window is 70 wide x 100 tall, split 30 (text) / 70 (gif).
+     The GIF preview below is a 112px (w-28) square, same as the widget's
+     square 70x70 gif area. ONE scale factor k = 112/70 (=1.6) ties this
+     slot's height AND every .text-bubble-preview dimension below back to
+     the real widget's own numbers (frontend/index.html) - using a
+     different k for the bubble than for this slot is what made the two
+     look like they didn't share a single consistent layout. */
+  flex: none;
   position: relative;
-  width: 100%;
-  height: 2.6rem;
+  width: 112px;
+  height: calc(112px * 30 / 70); /* = 30 (real text panel height) * k */
   display: flex;
   align-items: flex-end;
   justify-content: center;
 }
 .text-bubble-preview {
+  /* Every value here is the real #text-bubble's own value (frontend/
+     index.html: max-width 68px, margin-bottom 3px, padding 1px 4px,
+     border 1.5px, border-radius 6px, font 10px/1.1) times k = 112/70, the
+     same k used for .text-bubble-slot above - so this bubble is a true
+     scaled copy of the real one, not an independently chosen size. */
   position: absolute;
-  bottom: 0.4rem;
-  max-width: 10rem;
-  max-height: 2.2rem;
-  overflow: hidden;
-  padding: 0.2rem 0.6rem;
+  box-sizing: border-box;
+  left: 50%;
+  bottom: calc(112px * 3 / 70); /* = 3px (real margin-bottom) * k */
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(112px * 68 / 70);
+  padding: calc(112px * 1 / 70) calc(112px * 4 / 70);
   background: rgba(20, 20, 43, 0.92);
-  border: 1.5px solid #8b73ff;
-  border-radius: 0.5rem;
+  border: calc(112px * 1.5 / 70) solid #8b73ff;
+  border-radius: calc(112px * 6 / 70);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: calc(112px * 10 / 70); /* = 10px (real font-size) * k */
+  line-height: 1.1;
   text-align: center;
   word-break: break-word;
+  /* Clamp by LINE COUNT (like the real #text-content), not max-height:
+     a max-height on this same box would have to subtract the padding/
+     border above out of the space left for the 2 lines of text (border-
+     box), cutting line 2 off - line-clamp doesn't have that problem. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>
 <!-- fx-fade/fx-bounce/fx-shake come from here - shared with the widget
