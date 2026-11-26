@@ -240,12 +240,22 @@ const nonIntervalFields = computed(() => adapterFields.value.filter((f) => f.key
 const adapterConfig = ref({}); // current field values, keyed like adapterFields
 const adapterFileInput = ref(null);
 const adapterBusy = ref(false);
+// Self-reported by the active adapter's own status()/log() (wasmsource.go),
+// separate from adapterError above (which is only the APP's own trap
+// fallback reason) - status is the "ok"/"error" the adapter itself wants
+// shown, log is its own activity trail, both purely informational, never
+// drive any Thủ công/Tự động switch on their own.
+const adapterStatus = ref({ state: 'ok', message: '' });
+const adapterLog = ref([]); // [{time, message}, ...], newest last
+const showAdapterLog = ref(false);
 
 async function loadAdapterStatus() {
     try {
         const res = await (await fetch('/text-adapter')).json();
         adapterList.value = Array.isArray(res.list) ? res.list : [];
         adapterEnabled.value = !!res.enabled;
+        adapterStatus.value = res.status || { state: 'ok', message: '' };
+        adapterLog.value = Array.isArray(res.log) ? res.log : [];
         const prevError = adapterError.value;
         adapterError.value = res.error || '';
         // The server just fell back to manual on its own (error appeared,
@@ -259,6 +269,16 @@ async function loadAdapterStatus() {
     } catch (_) {}
 }
 onMounted(loadAdapterStatus);
+// Keep status()/log() fresh while an adapter is actually running - same
+// 3s cadence as the text poll above (same reason: separate Wails process,
+// no live-push channel, plain HTTP poll is the only thing that crosses it).
+let adapterStatusPoll = null;
+onMounted(() => {
+    adapterStatusPoll = setInterval(() => {
+        if (adapterEnabled.value) loadAdapterStatus();
+    }, 3000);
+});
+onUnmounted(() => clearInterval(adapterStatusPoll));
 
 // Opens (or closes, toggling the same box again) an adapter's config panel
 // without applying anything - viewing/editing config is always allowed,
@@ -442,12 +462,71 @@ async function pushCurrent() {
   <div class="flex flex-col gap-6">
     <PageHeader icon="monitor" :title="t('widgetTitle')" :subtitle="t('subtitle')"/>
 
-    <!-- Widget screen position + text -->
+    <!-- Widget screen position + text + GIF - one card: everything that
+         shapes what's actually showing on the widget right now, instead of
+         position/text and the GIF living in two separate cards. -->
     <div class="card bg-base-100">
       <form class="card-body gap-4" @submit.prevent="sendText">
-        <div class="flex flex-col sm:flex-row gap-6">
-          <div class="flex flex-col gap-2 shrink-0">
-            <h2 class="font-bold flex items-center gap-2"><Icon name="monitor"/> {{ t('positionLabel') }}</h2>
+        <!-- Row 1: left half = GIF preview + import/reset buttons, right
+             half = Vị trí + Khởi động cùng Windows. section-divider: a
+             visible rule between the two halves, since both now live in
+             one merged card with no card border of their own to tell them
+             apart. -->
+        <div class="flex flex-col sm:flex-row gap-6 section-row">
+          <div class="flex-1 flex flex-col sm:flex-row gap-5 min-w-0">
+            <div class="flex flex-col items-center shrink-0">
+              <h2 class="font-bold flex items-center gap-2 self-start section-title"><Icon name="image"/> {{ t('gifLabel') }}</h2>
+              <div class="flex flex-col items-center mt-1">
+                <div class="widget-replica">
+                  <div class="text-bubble-slot">
+                    <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
+                      {{ previewShown }}
+                    </div>
+                  </div>
+                  <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-28 h-28"/>
+                </div>
+                <span v-if="previewLines.length > 1" class="text-[10px] text-base-content/50 mt-1">
+                  {{ t('textLineCounter', { i: previewIdx + 1, n: previewLines.length }) }}
+                </span>
+                <span class="field-label mt-1">{{ t('gifCurrent') }}</span>
+              </div>
+            </div>
+
+            <!-- @container: once this column gets narrow (gets squeezed by
+                 window resize), every button below drops its label text and
+                 falls back to icon-only + native title tooltip instead of
+                 overflowing/wrapping - see btn-label spans below. -->
+            <div class="flex flex-col gap-2 flex-1 min-w-0 btn-container mt-9">
+              <div class="dropzone dropzone-compact" :class="{ 'is-over': dragOver }"
+                @click="fileInput?.click()" @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop.prevent="onDrop">
+                <input ref="fileInput" type="file" accept=".gif,image/gif" class="hidden" @change="pick($event.target.files[0])"/>
+                <Icon name="upload" :size="18" class="text-primary"/>
+                <div class="min-w-0">
+                  <p class="font-bold text-sm truncate">{{ chosen ? chosen.name : t('dropzoneDefault') }}</p>
+                  <p class="text-xs text-base-content/60">{{ t('dropzoneOr') }}</p>
+                </div>
+              </div>
+
+              <div class="flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-primary btn-sm" :disabled="busy || !chosen" :title="t('uploadSubmit')" @click="apply">
+                  <span v-if="busy" class="loading loading-spinner loading-sm"></span>
+                  <Icon v-else name="check"/> <span class="btn-label">{{ t('uploadSubmit') }}</span>
+                </button>
+                <button v-if="chosen" type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-2" :disabled="busy" :title="t('cancelPickBtn')" @click="cancelPick">
+                  <Icon name="x"/> <span class="btn-label">{{ t('cancelPickBtn') }}</span>
+                </button>
+                <button v-else type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-2" :title="t('resetSubmit')" @click="reset">
+                  <Icon name="rotate-ccw"/> <span class="btn-label">{{ t('resetSubmit') }}</span>
+                </button>
+                <button v-if="account.token" type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-2" :title="t('pushCurrentGifBtn')" @click="pushCurrent">
+                  <Icon name="upload"/> <span class="btn-label">{{ t('pushCurrentGifBtn') }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 flex flex-col gap-2 min-w-0 section-right">
+            <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="monitor"/> {{ t('positionLabel') }}</h2>
             <div class="flex flex-col items-center w-48 mt-1 shrink-0">
               <div class="relative aspect-video w-full border-2 border-neutral rounded-md bg-base-200">
                 <button v-for="c in CORNERS" :key="c.id" type="button"
@@ -468,119 +547,98 @@ async function pushCurrent() {
               </div>
               <div class="w-10 h-2 border-x-2 border-b-2 border-neutral rounded-b-sm"></div>
             </div>
-          </div>
 
-          <div class="flex flex-col gap-2 flex-1 min-w-0">
-            <label class="flex items-center justify-between gap-3 cursor-pointer">
+            <label class="flex items-center justify-between gap-3 cursor-pointer mt-3">
               <span class="flex flex-col gap-1">
-                <h2 class="font-bold flex items-center gap-2"><Icon name="power"/> {{ t('autoStartLabel') }}</h2>
+                <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="power"/> {{ t('autoStartLabel') }}</h2>
                 <p class="text-xs text-base-content/60">{{ t('autoStartHint') }}</p>
               </span>
               <input type="checkbox" class="toggle toggle-primary toggle-sm shrink-0" :checked="autoStart" @change="setAutoStart($event.target.checked)" :aria-label="t('autoStartLabel')"/>
             </label>
+          </div>
+        </div>
 
-            <h2 class="font-bold flex items-center gap-2"><Icon name="type"/> {{ t('textLabel') }}</h2>
-            <p class="text-xs text-base-content/60">{{ adapterEnabled ? t('textHintDisabledByAdapter') : t('textHint') }}</p>
-            <div class="flex gap-2 mt-1 items-start">
-              <textarea v-model="text" @input="textDirty = true" :disabled="adapterEnabled" :placeholder="t('textPlaceholder')" rows="3" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" style="min-height: 3rem;" autofocus></textarea>
-              <button type="submit" class="btn btn-primary" :disabled="adapterEnabled">{{ t('textSubmit') }}</button>
-            </div>
-
-            <h2 class="font-bold flex items-center gap-2 mt-2"><Icon name="sparkles"/> {{ t('textStyleLabel') }}</h2>
-            <div class="flex gap-2 items-center flex-wrap">
+        <!-- Row 2: Màu chữ/hiệu ứng (1/3, left) + Chữ hiển thị (2/3,
+             right). section-row-top: a horizontal rule above, clearly
+             separating this row from row 1 above it (on top of the mt-4
+             spacing, which alone read as too subtle to tell the two rows
+             apart). -->
+        <div class="flex flex-col sm:flex-row gap-6 mt-4 section-row section-row-top">
+          <div class="flex flex-col gap-2 min-w-0 style-container" style="flex: 1 1 0%;">
+            <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="sparkles"/> {{ t('textStyleLabel') }}</h2>
+            <!-- style-row: column (each control full-width) while this
+                 column is narrow, row (side by side) once it's wide enough
+                 - driven by THIS container's own width, not the viewport,
+                 since it's the 1/3 column that actually gets squeezed. -->
+            <div class="style-row mt-1">
               <input v-model="textColor" type="color" class="input input-bordered h-10 w-14 p-1" @change="saveTextStyle"/>
-              <select v-model="textEffect" class="select select-bordered select-sm flex-1 min-w-0" @change="saveTextStyle">
+              <select v-model="textEffect" class="select select-bordered select-sm flex-1 style-select" @change="saveTextStyle">
                 <option v-for="fx in TEXT_EFFECTS" :key="fx.id" :value="fx.id">{{ t(fx.labelKey) }}</option>
               </select>
-              <select v-model.number="textInterval" class="select select-bordered select-sm" :title="t('textIntervalLabel')" @change="saveTextStyle">
+              <select v-model.number="textInterval" class="select select-bordered select-sm style-select" :title="t('textIntervalLabel')" @change="saveTextStyle">
                 <option v-for="n in TEXT_INTERVALS" :key="n" :value="n">{{ t('textIntervalOption', { n }) }}</option>
               </select>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2 min-w-0 section-right" style="flex: 2 1 0%;">
+            <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="type"/> {{ t('textLabel') }}</h2>
+            <p class="text-xs text-base-content/60">{{ adapterEnabled ? t('textHintDisabledByAdapter') : t('textHint') }}</p>
+            <div class="flex gap-2 mt-1 items-stretch btn-container">
+              <textarea v-model="text" @input="textDirty = true" :disabled="adapterEnabled" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" autofocus></textarea>
+              <button type="submit" class="btn btn-primary" :disabled="adapterEnabled" :title="t('textSubmit')">
+                <Icon name="send" :size="16"/> <span class="btn-label">{{ t('textSubmit') }}</span>
+              </button>
             </div>
           </div>
         </div>
       </form>
     </div>
 
-    <!-- GIF -->
-    <div class="card bg-base-100">
-      <div class="card-body gap-4">
-        <h2 class="font-bold flex items-center gap-2"><Icon name="image"/> {{ t('gifLabel') }}</h2>
-
-        <div class="flex flex-col sm:flex-row gap-5">
-          <div class="flex flex-col items-center gap-2 shrink-0">
-            <div class="flex flex-col items-center">
-              <!-- One single 70x100 (w x h) block, same shape as the real
-                   widget window: text panel stacked directly on top of the
-                   GIF, no gap, nothing in between - this IS the widget's
-                   whole screen, just scaled up for readability. -->
-              <div class="widget-replica">
-                <div class="text-bubble-slot">
-                  <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
-                    {{ previewShown }}
-                  </div>
-                </div>
-                <GifCanvas :load="loadPreview" :cache-key="previewKey" size="w-28 h-28"/>
-              </div>
-              <span v-if="previewLines.length > 1" class="text-[10px] text-base-content/50 mt-1">
-                {{ t('textLineCounter', { i: previewIdx + 1, n: previewLines.length }) }}
-              </span>
-            </div>
-            <span class="field-label">{{ t('gifCurrent') }}</span>
-          </div>
-
-          <div class="flex-1 min-w-0 flex flex-col gap-3">
-            <div class="dropzone flex-1" :class="{ 'is-over': dragOver }"
-              @click="fileInput?.click()" @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop.prevent="onDrop">
-              <input ref="fileInput" type="file" accept=".gif,image/gif" class="hidden" @change="pick($event.target.files[0])"/>
-              <Icon name="upload" :size="28" class="text-primary"/>
-              <div class="min-w-0">
-                <p class="font-bold truncate">{{ chosen ? chosen.name : t('dropzoneDefault') }}</p>
-                <p class="text-xs text-base-content/60">{{ t('dropzoneOr') }}</p>
-              </div>
-            </div>
-
-            <div class="flex gap-2 flex-wrap">
-              <button type="button" class="btn btn-primary flex-1" :disabled="busy || !chosen" @click="apply">
-                <span v-if="busy" class="loading loading-spinner loading-sm"></span>
-                <Icon v-else name="check"/> {{ t('uploadSubmit') }}
-              </button>
-              <button v-if="chosen" type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-2" :disabled="busy" @click="cancelPick">
-                <Icon name="x"/> {{ t('cancelPickBtn') }}
-              </button>
-              <button v-else type="button" class="btn btn-ghost border-2 border-neutral flex-1 gap-2" @click="reset">
-                <Icon name="rotate-ccw"/> {{ t('resetSubmit') }}
-              </button>
-            </div>
-            <button v-if="account.token" type="button" class="btn btn-sm btn-ghost border-2 border-neutral gap-2 self-start" @click="pushCurrent">
-              <Icon name="upload"/> {{ t('pushCurrentGifBtn') }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Automatic text source (.wasm adapter) -->
     <div class="card bg-base-100">
       <div class="card-body gap-4">
-        <h2 class="font-bold flex items-center gap-2"><Icon name="plug"/> {{ t('adapterLabel') }}</h2>
+        <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="plug"/> {{ t('adapterLabel') }}</h2>
         <p class="text-xs text-base-content/60">{{ t('adapterHint') }}</p>
 
         <p v-if="adapterError" class="text-xs text-error">{{ t('adapterFellBackNotice', { error: adapterError }) }}</p>
 
+        <!-- The active adapter's own status()/log() (wasmsource.go) -
+             separate from adapterError above: this never fell back to
+             Thủ công on its own, it's just what the adapter itself says
+             about its current run. Only shown while actually running. -->
+        <div v-if="adapterEnabled" class="flex items-center gap-2 flex-wrap">
+          <span class="flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded-md"
+            :class="adapterStatus.state === 'error' ? 'bg-error/15 text-error' : 'bg-success/15 text-success'">
+            <Icon :name="adapterStatus.state === 'error' ? 'x' : 'check'" :size="12"/>
+            {{ adapterStatus.state === 'error' ? t('adapterStatusError') : t('adapterStatusOk') }}
+          </span>
+          <span v-if="adapterStatus.message" class="text-xs text-base-content/60">{{ adapterStatus.message }}</span>
+          <button type="button" class="btn btn-xs btn-ghost border-2 border-neutral gap-1" @click="showAdapterLog = !showAdapterLog">
+            <Icon name="history" :size="12"/> {{ showAdapterLog ? t('adapterLogToggleHide') : t('adapterLogToggleShow') }}
+          </button>
+        </div>
+        <div v-if="adapterEnabled && showAdapterLog" class="rounded-md border-2 border-neutral bg-base-200 p-2 max-h-40 overflow-y-auto text-xs font-mono flex flex-col gap-1">
+          <p v-if="!adapterLog.length" class="text-base-content/50">{{ t('adapterLogEmpty') }}</p>
+          <p v-for="(entry, i) in adapterLog" :key="i" class="text-base-content/80">
+            <span class="text-base-content/40">{{ entry.time?.slice(11, 19) }}</span> {{ entry.message }}
+          </p>
+        </div>
+
         <!-- Mode toggle + import button on one row: both are "what governs
              the whole block below", so they belong together. -->
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap btn-container">
           <div class="join">
-            <button type="button" class="join-item btn btn-sm" :class="!adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" @click="setAdapterEnabled(false)">
+            <button type="button" class="join-item btn btn-sm" :class="!adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" :title="t('adapterModeManual')" @click="setAdapterEnabled(false)">
               {{ t('adapterModeManual') }}
             </button>
-            <button type="button" class="join-item btn btn-sm" :class="adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" :disabled="!activeAdapterId" @click="setAdapterEnabled(true)">
+            <button type="button" class="join-item btn btn-sm" :class="adapterEnabled ? 'btn-primary' : 'btn-ghost border-2 border-neutral'" :disabled="!activeAdapterId" :title="t('adapterModeAuto')" @click="setAdapterEnabled(true)">
               {{ t('adapterModeAuto') }}
             </button>
           </div>
-          <button type="button" class="btn btn-sm btn-primary gap-2" :disabled="adapterBusy" @click="adapterFileInput?.click()">
+          <button type="button" class="btn btn-sm btn-primary gap-2" :disabled="adapterBusy" :title="t('adapterImportBtn')" @click="adapterFileInput?.click()">
             <span v-if="adapterBusy" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else name="upload" :size="16"/> {{ t('adapterImportBtn') }}
+            <Icon v-else name="upload" :size="16"/> <span class="btn-label">{{ t('adapterImportBtn') }}</span>
           </button>
           <input ref="adapterFileInput" type="file" accept=".wasm" class="hidden" @change="pickAdapterFile($event.target.files[0])"/>
         </div>
@@ -625,8 +683,8 @@ async function pushCurrent() {
             <input v-model.number="adapterConfig._interval_sec" type="number" min="2" max="600" class="input input-bordered input-sm w-32"/>
           </div>
           <div class="flex gap-2">
-            <button type="submit" class="btn btn-sm btn-ghost border-2 border-neutral">{{ t('adapterSaveConfigBtn') }}</button>
-            <button type="button" class="btn btn-sm btn-primary" :disabled="viewingAdapterId === activeAdapterId && adapterEnabled" @click="applyAdapter(viewingAdapterId)">
+            <button type="submit" class="btn btn-sm btn-ghost border-2 border-neutral" :title="t('adapterSaveConfigBtn')">{{ t('adapterSaveConfigBtn') }}</button>
+            <button type="button" class="btn btn-sm btn-primary" :disabled="viewingAdapterId === activeAdapterId && adapterEnabled" :title="t('adapterUseBtn')" @click="applyAdapter(viewingAdapterId)">
               {{ t('adapterUseBtn') }}
             </button>
           </div>
@@ -637,6 +695,90 @@ async function pushCurrent() {
 </template>
 
 <style scoped>
+/* Icon+label buttons inside a .btn-container ancestor - hidden by default
+   so the button is icon-only with a native title tooltip, shown again once
+   that specific container (not the viewport - Tailwind 3 has no @container
+   utility yet, that's Tailwind 4; this is plain CSS container queries,
+   supported by the Chromium/WebView2 this app embeds) is wide enough that
+   the label actually fits without wrapping/overflowing. 12rem chosen
+   empirically for the longest label in this view ("Tải lên cloud") at
+   btn-sm size. */
+.btn-container { container-type: inline-size; }
+.btn-label { display: none; }
+@container (min-width: 12rem) {
+  .btn-label { display: inline; }
+}
+
+/* .style-container/.style-row: the color/effect/interval controls stack as
+   a column (each control full width) by default, and only switch to a
+   single row once their OWN container is wide enough to hold all three
+   WITHOUT shrinking below .style-select's min-width - same container-query
+   approach as .btn-container above, not a viewport breakpoint, since this
+   is the 1/3-width column that shrinks first. The 21rem threshold is
+   56px (color) + 2*0.5rem gap + 2*6rem (min-width below) + a little slack,
+   so the row never actually squeezes a select past the width its longest
+   option ("Mờ dần hiện ra" / "Mỗi câu 30 giây") needs - that's what was
+   cutting/overlapping the select's own text at the old 16rem threshold. */
+.style-container { container-type: inline-size; }
+.style-row { display: flex; flex-direction: column; gap: 0.5rem; }
+.style-select { min-width: 6rem; }
+@container (min-width: 21rem) {
+  .style-row { flex-direction: row; align-items: center; }
+}
+
+/* .dropzone-compact: shrinks the shared .dropzone (pixel.css, also used by
+   LibraryView here and in the portal) down for this narrower GIF column -
+   overridden locally instead of touching the shared rule, which the other
+   two usages still need at full size. */
+.dropzone-compact { gap: 0.5rem; padding: 0.75rem; }
+
+/* Each card section's own h2 heading (icon + text together, via
+   currentColor) - plain white, not themed. */
+.section-title { color: #fff !important; }
+
+/* .section-row/.section-right/.section-row-top: visual separators between
+   the config blocks now that they all live inside one merged card with no
+   card border of their own - a vertical rule between each row's two
+   halves, and a horizontal rule above row 2. Dashed + the same
+   purple→pink gradient as .gradient-text (the "Ancol-Ani" brand text),
+   not a plain border, which can't take a gradient color on its own - a
+   ::before overlay with the gradient as background, cut into dashes via
+   mask-image (a repeating-linear-gradient alpha pattern), does both at
+   once. Only on sm:flex-row (side by side); stacked on mobile-width has
+   no "between" to draw a line through. */
+@media (min-width: 640px) {
+  .section-row > :not(:first-child).section-right {
+    position: relative;
+    padding-left: 1rem;
+  }
+  .section-row > :not(:first-child).section-right::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, #8b73ff, #ff6bd6);
+    -webkit-mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
+    mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
+  }
+}
+.section-row-top {
+  position: relative;
+  padding-top: 1rem;
+}
+.section-row-top::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8b73ff, #ff6bd6);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
+}
+
 /* Mirrors the widget's own #text-bubble (frontend/index.html) so the
    preview here matches what actually shows on screen, just bigger. */
 .widget-replica {

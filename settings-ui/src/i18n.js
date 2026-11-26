@@ -45,9 +45,9 @@ export const translations = {
         dropzoneDefault: 'Kéo thả file GIF vào đây',
         dropzoneOr: 'hoặc bấm để chọn file · tối đa 3MB',
         uploadSubmit: 'Áp dụng',
-        resetSubmit: 'Đặt lại mặc định',
+        resetSubmit: 'Về mặc định',
         cancelPickBtn: 'Hủy',
-        pushCurrentGifBtn: 'Tải ảnh này lên thư viện',
+        pushCurrentGifBtn: 'Tải lên cloud',
         toastTextSent: 'Đã hiển thị',
         toastGifChanged: 'Đã đổi ảnh GIF',
         toastGifReset: 'Đã đặt lại ảnh mặc định',
@@ -60,10 +60,10 @@ export const translations = {
         // Text adapter (.wasm) - optional automatic source of the widget's
         // text, imported as a file from whoever set it up, instead of
         // typing manually above.
-        adapterLabel: 'Nguồn chữ tự động',
-        adapterHint: 'Nhập file .wasm được cung cấp để widget tự lấy chữ hiển thị, thay vì gõ tay ở trên. Không có file nào thì widget dùng đúng ô "Chữ hiển thị" phía trên.',
+        adapterLabel: 'Tích hợp tuỳ chỉnh',
+        adapterHint: 'Nạp file module .wasm theo chuẩn của Ancol-ani để kết nối tự động đến hệ thống của bạn.',
         adapterModeManual: 'Thủ công',
-        adapterModeAuto: 'Tự động (adapter)',
+        adapterModeAuto: 'Tự động',
         adapterImportBtn: 'Nạp module',
         adapterActive: 'Đang dùng nguồn tự động',
         adapterInactive: 'Chưa dùng nguồn tự động',
@@ -80,6 +80,11 @@ export const translations = {
         errAdapterWasmOnly: 'Chỉ nhận file .wasm',
         toastAdapterFellBack: 'Nguồn tự động bị lỗi, đã quay lại chữ thủ công: {error}',
         adapterFellBackNotice: 'Nguồn tự động vừa bị lỗi nên đã tự chuyển về Thủ công: {error}',
+        adapterStatusOk: 'Đang chạy ổn',
+        adapterStatusError: 'Adapter báo lỗi',
+        adapterLogToggleShow: 'Xem log hoạt động',
+        adapterLogToggleHide: 'Ẩn log hoạt động',
+        adapterLogEmpty: 'Chưa có log nào.',
 
         // Library page
         libraryTitle: 'Thư viện của tôi',
@@ -233,6 +238,11 @@ export const translations = {
         errAdapterWasmOnly: 'Only .wasm files are accepted',
         toastAdapterFellBack: 'The automatic source errored and fell back to manual text: {error}',
         adapterFellBackNotice: 'The automatic source just errored, so it switched back to Manual on its own: {error}',
+        adapterStatusOk: 'Running fine',
+        adapterStatusError: 'Adapter reports an error',
+        adapterLogToggleShow: 'View activity log',
+        adapterLogToggleHide: 'Hide activity log',
+        adapterLogEmpty: 'No log entries yet.',
 
         libraryTitle: 'My library',
         librarySubtitle: 'GIFs in your server account. Pick one to use on this device\'s widget.',

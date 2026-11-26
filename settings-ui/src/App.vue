@@ -55,7 +55,7 @@ async function reloadPage() {
       <div class="max-w-5xl mx-auto px-4 h-16 flex items-center gap-4">
         <RouterLink to="/" class="flex items-end gap-0 shrink-0">
           <AppLogo :size="36"/>
-          <span class="font-extrabold text-lg hidden sm:inline whitespace-nowrap leading-none"><span class="gradient-text">ncol-Ani</span></span>
+          <span class="font-extrabold text-lg whitespace-nowrap leading-none"><span class="gradient-text">ncol-Ani</span></span>
         </RouterLink>
 
         <nav class="hidden md:flex items-center gap-1 flex-1">

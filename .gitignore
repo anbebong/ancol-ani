@@ -7,3 +7,4 @@ cmd/syncserver/portal/dist
 data/
 *.exe
 *.log
+tests/
