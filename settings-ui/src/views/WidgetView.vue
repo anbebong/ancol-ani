@@ -1,9 +1,9 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import Icon from '@ui/components/Icon.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
-import { confirmDialog } from '@ui/modal.js';
-import { splitToFit, makeFitsWithinLines, WIDGET_BUBBLE } from '@ui/text-fit.js';
+import Icon from '@theme/components/Icon.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
+import { confirmDialog } from '@theme/modal.js';
+import { splitToFit, makeFitsWithinLines, WIDGET_BUBBLE } from '@theme/text-fit.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
 import { account, serverApi } from '../account.js';
@@ -694,4 +694,4 @@ async function pushCurrent() {
 </style>
 <!-- fx-fade/fx-bounce/fx-shake come from here - shared with the widget
      itself (frontend/index.html) so the two never drift out of sync. -->
-<style src="@ui/text-effects.css"></style>
+<style src="@theme/text-effects.css"></style>

@@ -32,7 +32,7 @@ import (
 // The web portal (accounts, GIF management, admin, public gallery) is its
 // own Vite project under portal/, built separately (cd portal && npm run
 // build) and embedded here as static files - same pattern as the desktop
-// app's local settings page (see /web/ at the project root).
+// app's local settings page (see /settings-ui/ at the project root).
 //
 //go:embed portal/dist
 var webFiles embed.FS

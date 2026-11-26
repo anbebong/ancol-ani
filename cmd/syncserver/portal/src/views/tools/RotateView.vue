@@ -1,9 +1,9 @@
 <script setup>
 import { ref } from 'vue';
-import PageHeader from '@ui/components/PageHeader.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
 import ToolBackLink from '../../components/ToolBackLink.vue';
 import ToolPage from '../../components/ToolPage.vue';
-import Icon from '@ui/components/Icon.vue';
+import Icon from '@theme/components/Icon.vue';
 import { postTool } from '../../toolsApi.js';
 import { errMsg } from '../../api.js';
 

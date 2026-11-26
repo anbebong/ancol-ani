@@ -2,8 +2,8 @@
 import { ref } from 'vue';
 import { api, errMsg } from '../api.js';
 import { session } from '../session.js';
-import Icon from '@ui/components/Icon.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
+import Icon from '@theme/components/Icon.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
 
 const current = ref('');
 const next = ref('');

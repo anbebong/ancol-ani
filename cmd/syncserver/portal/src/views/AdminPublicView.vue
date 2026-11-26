@@ -1,12 +1,12 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { api, errMsg, fmtDate, tagList, forgetImage, PAGE_SIZE } from '../api.js';
-import { confirmDialog } from '@ui/modal.js';
-import Icon from '@ui/components/Icon.vue';
-import Pager from '@ui/components/Pager.vue';
+import { confirmDialog } from '@theme/modal.js';
+import Icon from '@theme/components/Icon.vue';
+import Pager from '@theme/components/Pager.vue';
 import GifImage from '../components/GifImage.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
-import StarButton from '@ui/components/StarButton.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
+import StarButton from '@theme/components/StarButton.vue';
 
 const q = ref('');
 const items = ref([]);

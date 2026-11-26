@@ -1,5 +1,5 @@
 import './style.css';
-import '@ui/pixel.css';
+import '@theme/pixel.css';
 import { createApp } from 'vue';
 import App from './App.vue';
 import { createAppRouter } from './router.js';

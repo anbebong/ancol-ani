@@ -1,9 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import Icon from '@ui/components/Icon.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
-import { confirmDialog } from '@ui/modal.js';
+import Icon from '@theme/components/Icon.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
+import { confirmDialog } from '@theme/modal.js';
 import { t } from '../i18n.js';
 import { account, loadMe, startLink, unlink, checkServer } from '../account.js';
 import { toast } from '../toast.js';

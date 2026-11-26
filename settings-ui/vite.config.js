@@ -1,5 +1,5 @@
 import vue from '@vitejs/plugin-vue';
-import { sharedUi } from '../ui/vite.shared.js';
+import { sharedUi } from '../theme/vite.shared.js';
 
 const shared = sharedUi(__dirname);
 

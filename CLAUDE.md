@@ -9,21 +9,21 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 | Thư mục | Là gì | Nhúng vào |
 |---|---|---|
 | repo root (`app.go`, `main.go`) | App desktop Wails: widget + HTTP server local, port tự dò từ `preferredPort` (48821) nếu bị chiếm (`/gif`, `/text`, `/version`, `/changelog`, `/position`, `/autostart`) | `build/bin/ancol-ani.exe` |
-| `frontend/` | UI widget (chỉ `index.html` + `src/gifPlayer.js`) | exe (`frontend/dist`) |
-| `web/` | Trang settings `localhost:<port>` — Vue 3 + Vue Router (hash) | exe (`web/dist`) |
+| `widget/` | UI widget (chỉ `index.html` + `src/gifPlayer.js`) | exe (`widget/dist`) |
+| `settings-ui/` | Trang settings `localhost:<port>` — Vue 3 + Vue Router (hash) | exe (`settings-ui/dist`) |
 | `cmd/syncserver/` | Sync server Go (`:9090`, SQLite `data/`) | `syncserver.exe` |
 | `cmd/syncserver/portal/` | Web portal của server — Vue 3 + Vue Router (hash) | `syncserver.exe` (`portal/dist`) |
-| `ui/` | **Thiết kế dùng chung** của `web/` và `portal/`: theme, `pixel.css`, component, `modal.js`, `icons.js`, logo. Import qua `@ui/...`. Không có `package.json`. | — |
+| `theme/` | **Thiết kế dùng chung** của `settings-ui/` và `portal/`: theme, `pixel.css`, component, `modal.js`, `icons.js`, logo. Import qua `@theme/...`. Không có `package.json`. | — |
 
 ## Quy tắc
 
-- Tên app hiển thị cho người dùng viết là **"Ancol-Ani"** (cả hai chữ A đầu đều viết hoa), không viết `ANCOL-ANI` hay `Ancol-ani`. **Không đổi** các chuỗi kỹ thuật viết thường `ancol-ani`: tiêu đề cửa sổ widget (`Title` trong `main.go`, `<title>` của `frontend/index.html`, vì `app.go`/`findWindowHandle` tìm cửa sổ widget theo đúng tiêu đề `"ancol-ani"` này), khóa localStorage (`ancol-ani-*`, đổi là người dùng mất đăng nhập/liên kết), tên file exe, tên gói `wails.json` (`name`/`outputfilename`) và tên sản phẩm của bộ cài.
+- Tên app hiển thị cho người dùng viết là **"Ancol-Ani"** (cả hai chữ A đầu đều viết hoa), không viết `ANCOL-ANI` hay `Ancol-ani`. **Không đổi** các chuỗi kỹ thuật viết thường `ancol-ani`: tiêu đề cửa sổ widget (`Title` trong `main.go`, `<title>` của `widget/index.html`, vì `app.go`/`findWindowHandle` tìm cửa sổ widget theo đúng tiêu đề `"ancol-ani"` này), khóa localStorage (`ancol-ani-*`, đổi là người dùng mất đăng nhập/liên kết), tên file exe, tên gói `wails.json` (`name`/`outputfilename`) và tên sản phẩm của bộ cài.
 
-- **Giao diện chung sửa ở `ui/`**, rồi build lại cả `web/` và `portal/`. Không chép component/CSS sang từng project. Icon mới: thêm vào `ui/icons.js` (lucide-static).
-- Hai trang web phải giữ cùng thiết kế (theme daisyUI "pixel", thanh điều hướng, card, toast/alert). Trang settings song ngữ: mọi chữ hiển thị đi qua `t()` trong `web/src/i18n.js`, thêm key cho **cả** `vi` và `en`.
-- GIF trong `web/` luôn vẽ bằng canvas (`GifCanvas.vue`), không dùng `<img>` (Chromium làm đứng animation).
-- Xác nhận dùng `confirmDialog` trong `ui/modal.js`, không dùng `window.confirm/prompt`.
-- Router của `web/` được tạo sau khi xử lý `?token=` (xem DEV-NOTES mục 5); đừng chuyển về router tạo sẵn ở module level.
+- **Giao diện chung sửa ở `theme/`**, rồi build lại cả `settings-ui/` và `portal/`. Không chép component/CSS sang từng project. Icon mới: thêm vào `theme/icons.js` (lucide-static).
+- Hai trang web phải giữ cùng thiết kế (theme daisyUI "pixel", thanh điều hướng, card, toast/alert). Trang settings song ngữ: mọi chữ hiển thị đi qua `t()` trong `settings-ui/src/i18n.js`, thêm key cho **cả** `vi` và `en`.
+- GIF trong `settings-ui/` luôn vẽ bằng canvas (`GifCanvas.vue`), không dùng `<img>` (Chromium làm đứng animation).
+- Xác nhận dùng `confirmDialog` trong `theme/modal.js`, không dùng `window.confirm/prompt`.
+- Router của `settings-ui/` được tạo sau khi xử lý `?token=` (xem DEV-NOTES mục 5); đừng chuyển về router tạo sẵn ở module level.
 - Lỗi server trả về 401 nghĩa là "phiên đã mất" (client tự đăng xuất). Lỗi nghiệp vụ như sai mật khẩu hiện tại thì dùng 403/400.
 - Portal và client **không bao giờ dùng chung một token**: khi liên kết hay "Mở portal" thì luôn xin token mới qua `POST /auth/token` (DEV-NOTES mục 5). Đây không phải OIDC, mà là luồng chuyển hướng tự viết; token sống 1 giờ, chưa có refresh token.
 - Vị trí widget tính bằng **pixel thật** và đặt qua Win32 `SetWindowPos(HWND_TOPMOST)` (`app.go`); đừng quay lại `runtime.WindowSetPosition` với kích thước logic (lệch khi scale ≠ 100%).
@@ -33,8 +33,8 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 ## Build (Windows, chi tiết ở DEV-NOTES mục 2)
 
 - Máy dev đặt `NODE_ENV=production` → `npm install` bỏ devDependencies. Luôn cài bằng `npm ci --include=dev` (hoặc `npm install --include=dev`).
-- App desktop: `cd web && npm run build`, `cd frontend && npm run build`, rồi `wails build -s` (`-s` vì Wails tự cài npm sẽ thiếu `vite`). Wails CLI ở `C:\Users\an\go\bin\wails.exe`.
-- Sau `wails build`, khôi phục file nó tự sửa: `git checkout -- go.mod frontend/package.json.md5 frontend/wailsjs`.
+- App desktop: `cd settings-ui && npm run build`, `cd widget && npm run build`, rồi `wails build -s` (`-s` vì Wails tự cài npm sẽ thiếu `vite`). Wails CLI nằm ở `<GOPATH>/bin/wails.exe` — đường dẫn `GOPATH` đổi theo máy, luôn tự kiểm tra bằng `go env GOPATH` trước khi gọi, đừng hardcode path.
+- Sau `wails build`, khôi phục file nó tự sửa: `git checkout -- go.mod widget/package.json.md5 widget/wailsjs`.
 - Server: `cd cmd/syncserver/portal && npm run build`, rồi `go run ./cmd/syncserver` (cần thư mục `data/`). Server nhúng `portal/dist` lúc build, sửa portal phải khởi động lại server.
 - Cần build lại client thì **tự tắt `ancol-ani.exe`** (cả 2 tiến trình: widget + cửa sổ settings) rồi build, **không cần hỏi** (người dùng đã đồng ý, 2026-11-21; exe đang chạy thì build đè sẽ lỗi). **Không tự mở lại** app sau khi build, để họ tự mở.
 
@@ -54,11 +54,11 @@ Trang **Về Ancol-Ani** có nút "Kiểm tra cập nhật" — chỉ chạy khi
 
 ## Icon
 
-Sinh lại mọi icon từ một ảnh gốc: `scripts/gen-icons.ps1 -Source <png>`, rồi tăng `?v=` ở thẻ icon trong `web/index.html` và `cmd/syncserver/portal/index.html`. Xem docs/ICONS.md.
+Sinh lại mọi icon từ một ảnh gốc: `scripts/gen-icons.ps1 -Source <png>`, rồi tăng `?v=` ở thẻ icon trong `settings-ui/index.html` và `cmd/syncserver/portal/index.html`. Xem docs/ICONS.md.
 
 ## Git
 
-- Commit theo Conventional Commits, type/scope tiếng Anh, mô tả tiếng Việt (vd `feat(web): ...`, `fix(desktop): ...`). Scope thường dùng: `desktop`, `web`, `portal`, `syncserver`, `ui`, `release`.
+- Commit theo Conventional Commits, type/scope tiếng Anh, mô tả tiếng Việt (vd `feat(settings-ui): ...`, `fix(desktop): ...`). Scope thường dùng: `desktop`, `settings-ui`, `portal`, `syncserver`, `theme`, `release`.
 - Làm trên nhánh tính năng, không commit thẳng vào `main`. Chỉ push khi được yêu cầu.
 - Không commit `data/`, các thư mục `dist/`, `node_modules/`.
 

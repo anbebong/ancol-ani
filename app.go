@@ -277,16 +277,16 @@ const maxGifBytes = 3 << 20 // 3MB
 // Shown on the widget's text bubble until the user sets something else.
 const defaultText = "Ancol Hello"
 
-//go:embed frontend/src/mascot.gif
+//go:embed widget/src/mascot.gif
 var defaultGif []byte
 
 // The local settings page (http://localhost:<port>, port chosen by
 // resolveListener) is its own small Vite
-// project under web/, built separately (cd web && npm run build) and
-// embedded here as static files, instead of living as an inline HTML
-// string in Go.
+// project under settings-ui/, built separately (cd settings-ui && npm run
+// build) and embedded here as static files, instead of living as an inline
+// HTML string in Go.
 //
-//go:embed web/dist
+//go:embed settings-ui/dist
 var webDist embed.FS
 
 // sanitizeGif decodes and re-encodes the GIF through Go's standard gif
@@ -341,7 +341,7 @@ type widgetSettings struct {
 	Corner string `json:"corner"`
 	Text   string `json:"text"`
 	// Display style for Text: a hex color and one named entrance effect,
-	// applied by the widget (frontend/index.html) each time the text
+	// applied by the widget (widget/index.html) each time the text
 	// changes. Kept separate from Text itself so re-saving just the text
 	// (the common case) doesn't need to know the current style.
 	TextColor  string `json:"textColor"`
@@ -556,7 +556,7 @@ func NewApp() *App {
 	return &App{}
 }
 
-// LocalPort is bound to the frontend (main.go's Bind) so frontend/index.html
+// LocalPort is bound to the frontend (main.go's Bind) so widget/index.html
 // can build its fetch URLs from the single source of truth (activePort)
 // instead of hardcoding the port in JS too.
 func (a *App) LocalPort() string {
@@ -629,7 +629,7 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 	}
 	mux := http.NewServeMux()
 
-	webFS, err := fs.Sub(webDist, "web/dist")
+	webFS, err := fs.Sub(webDist, "settings-ui/dist")
 	if err != nil {
 		panic(err)
 	}
@@ -805,6 +805,8 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 			"enabled":  settings.AdapterEnabled,
 			"activeId": settings.ActiveAdapterID,
 			"error":    lastAdapterErrorString(),
+			"status":   currentAdapterStatus(),
+			"log":      currentAdapterLog(),
 			"list":     list,
 		})
 	})

@@ -49,7 +49,7 @@
         #text-bubble.is-empty { display: none; }
         /* .fx-fade/.fx-bounce/.fx-shake (applied to #text-content for as
            long as the current text is shown - see renderText below) come
-           from ../ui/text-effects.css, imported in the module script below.
+           from ../theme/text-effects.css, imported in the module script below.
            "typewriter" has no CSS class: it's driven by a JS loop instead
            that retypes the text on a timer. */
         #text-bubble::after {
@@ -135,8 +135,8 @@
 </div>
 <script type="module">
     import { playGif } from './src/gifPlayer.js';
-    import { splitToFit, makeFitsWithinLines, WIDGET_BUBBLE } from '../ui/text-fit.js';
-    import '../ui/text-effects.css';
+    import { splitToFit, makeFitsWithinLines, WIDGET_BUBBLE } from '../theme/text-fit.js';
+    import '../theme/text-effects.css';
     import settingsIcon from 'lucide-static/icons/settings.svg?raw';
     import xIcon from 'lucide-static/icons/x.svg?raw';
 
@@ -209,7 +209,7 @@
         if (multi) rotateTimer = setTimeout(next, textInterval * 1000);
     }
 
-    // Canvas-measured fit check (see ui/text-fit.js) - uses WIDGET_BUBBLE,
+    // Canvas-measured fit check (see theme/text-fit.js) - uses WIDGET_BUBBLE,
     // the shared constants mirroring #text-bubble/#text-content's own CSS
     // above, so the settings page's preview (WidgetView.vue) computes the
     // exact same split as this real widget without having to read it.

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import Icon from '@ui/components/Icon.vue';
+import Icon from '@theme/components/Icon.vue';
 import ResultPreview from './ResultPreview.vue';
 import { chainedFile, takeChainedFile } from '../toolChain.js';
 

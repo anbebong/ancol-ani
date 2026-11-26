@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import Icon from '@ui/components/Icon.vue';
-import Pager from '@ui/components/Pager.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
-import StarButton from '@ui/components/StarButton.vue';
-import { confirmDialog } from '@ui/modal.js';
+import Icon from '@theme/components/Icon.vue';
+import Pager from '@theme/components/Pager.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
+import StarButton from '@theme/components/StarButton.vue';
+import { confirmDialog } from '@theme/modal.js';
 import GifCanvas from '../components/GifCanvas.vue';
 import { t } from '../i18n.js';
 import { serverApi, cachedGif, pullToWidget, fmtDate, tagList, PAGE_SIZE } from '../account.js';

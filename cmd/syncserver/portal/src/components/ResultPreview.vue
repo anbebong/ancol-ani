@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, onUnmounted } from 'vue';
-import Icon from '@ui/components/Icon.vue';
+import Icon from '@theme/components/Icon.vue';
 import { setChainedResult } from '../toolChain.js';
 
 const props = defineProps({

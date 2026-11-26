@@ -1,6 +1,6 @@
 <script setup>
-import PageHeader from '@ui/components/PageHeader.vue';
-import Icon from '@ui/components/Icon.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
+import Icon from '@theme/components/Icon.vue';
 
 const tools = [
     { to: '/tools/convert', icon: 'images', title: 'Chuyển đổi thành GIF', desc: 'Từ video, một ảnh, hoặc nhiều ảnh.', ready: true },

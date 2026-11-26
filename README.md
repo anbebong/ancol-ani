@@ -18,20 +18,20 @@ Chi tiết kiến trúc, build, API, luồng liên kết tài khoản: xem [CLAU
 | Thư mục | Là gì |
 |---|---|
 | repo root (`app.go`, `main.go`) | App desktop Wails: widget + server local |
-| `frontend/` | UI widget (GIF + chữ) |
-| `web/` | Trang settings local — Vue 3 |
+| `widget/` | UI widget (GIF + chữ) |
+| `settings-ui/` | Trang settings local — Vue 3 |
 | `cmd/syncserver/` | Sync server Go (đồng bộ/chia sẻ GIF qua tài khoản) |
 | `cmd/syncserver/portal/` | Web portal của sync server — Vue 3 |
-| `ui/` | Thiết kế dùng chung giữa `web/` và `portal/` |
+| `theme/` | Thiết kế dùng chung giữa `settings-ui/` và `portal/` |
 
 ## Phát triển
 
-Máy dev đặt `NODE_ENV=production` thì cần cài bằng `npm ci --include=dev` (hoặc `npm install --include=dev`) cho cả `web/`, `frontend/` và `cmd/syncserver/portal/`.
+Máy dev đặt `NODE_ENV=production` thì cần cài bằng `npm ci --include=dev` (hoặc `npm install --include=dev`) cho cả `settings-ui/`, `widget/` và `cmd/syncserver/portal/`.
 
 ```sh
 # App desktop
 cd web && npm run build
-cd ../frontend && npm run build
+cd ../widget && npm run build
 wails build -s   # -s vì Wails tự cài npm sẽ thiếu vite
 
 # Sync server
@@ -39,7 +39,7 @@ cd cmd/syncserver/portal && npm run build
 go run ./cmd/syncserver
 ```
 
-Build xong, khôi phục file Wails tự sửa: `git checkout -- go.mod frontend/package.json.md5 frontend/wailsjs`.
+Build xong, khôi phục file Wails tự sửa: `git checkout -- go.mod widget/package.json.md5 widget/wailsjs`.
 
 ## Build
 

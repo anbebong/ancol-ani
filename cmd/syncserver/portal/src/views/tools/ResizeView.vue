@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onUnmounted } from 'vue';
-import PageHeader from '@ui/components/PageHeader.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
 import ToolBackLink from '../../components/ToolBackLink.vue';
-import Icon from '@ui/components/Icon.vue';
+import Icon from '@theme/components/Icon.vue';
 import ResultPreview from '../../components/ResultPreview.vue';
 import { postTool } from '../../toolsApi.js';
 import { errMsg } from '../../api.js';

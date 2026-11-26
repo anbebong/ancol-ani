@@ -2,9 +2,9 @@
 import { ref, onMounted } from 'vue';
 import { api, errMsg } from '../api.js';
 import { session } from '../session.js';
-import { confirmDialog } from '@ui/modal.js';
-import Icon from '@ui/components/Icon.vue';
-import PageHeader from '@ui/components/PageHeader.vue';
+import { confirmDialog } from '@theme/modal.js';
+import Icon from '@theme/components/Icon.vue';
+import PageHeader from '@theme/components/PageHeader.vue';
 
 const users = ref([]);
 const loading = ref(true);

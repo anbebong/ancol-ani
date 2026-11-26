@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue';
-import Icon from '@ui/components/Icon.vue';
-import AppLogo from '@ui/components/AppLogo.vue';
+import Icon from '@theme/components/Icon.vue';
+import AppLogo from '@theme/components/AppLogo.vue';
 import { t, lang, toggleLang } from './i18n.js';
 import { account, loadMe } from './account.js';
 import { appInfo, hasUnseenUpdate, loadVersion } from './appInfo.js';

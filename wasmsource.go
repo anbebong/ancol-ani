@@ -44,9 +44,32 @@ package main
 //       optional. Every field (required or not) must be <= 255 characters;
 //       importWasmAdapter rejects the file otherwise. See
 //       docs/WASM-ADAPTER.md for the exact contract.
+//   - status() -> packed(ptr, len)
+//       Called right after every poll() (success or empty), so the adapter
+//       can report what poll() alone can't: e.g. "đang lỗi mạng, sẽ thử
+//       lại" without that forcing a trap/fallback to manual. A JSON object
+//       with a required "state" key ("ok" | "error") and an optional
+//       "message" string. Empty/unparsable output is treated as
+//       {"state":"ok"} rather than failing the whole adapter - status is
+//       informational only, it never triggers the trap fallback itself.
+//   - log() -> packed(ptr, len)
+//       Called right after status(), same pull pattern as poll/status (the
+//       adapter never pushes anything out on its own - see the http_fetch
+//       comment below for why). Returns whatever activity lines the
+//       adapter wants surfaced since the last call (what it's doing, not
+//       just poll's text output) - the adapter accumulates these itself
+//       internally and hands them over here, since it has no
+//       filesystem/stdout inside the sandbox to write to directly.
+//       Multiple lines are newline-separated, same convention as poll's
+//       multi-line text; empty = nothing new. The app keeps the last 100
+//       lines across calls (see adapterLogMaxEntries) and exposes them via
+//       GET /text-adapter's "log" field - purely a debugging aid, never
+//       persisted to disk, never sent anywhere.
 //
 // Host import the adapter may call (its only way to reach the network -
-// wasm has no sockets of its own):
+// wasm has no sockets of its own, and no way to call back into the host
+// except from inside a call the host itself already made into it, e.g.
+// from inside poll()):
 //   - env.http_fetch(urlPtr uint32, urlLen uint32) -> packed(respPtr, respLen)
 //       A plain GET to the URL the adapter itself built (e.g. baking in an
 //       api_key from configure()). This app does the actual HTTP call and
@@ -73,6 +96,75 @@ import (
 	"github.com/tetratelabs/wazero/api"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// adapterLogMaxEntries/adapterLogMaxLineBytes bound the activity log's
+// memory use - it's a debugging aid for the person running the app, not a
+// durable record, so an old adapter run's lines are simply dropped once the
+// ring fills rather than persisted or capped per-adapter.
+const (
+	adapterLogMaxEntries   = 100
+	adapterLogMaxLineBytes = 2 << 10 // 2KB/line - plenty for a log message, rejects spam/abuse
+)
+
+type adapterLogEntry struct {
+	Time    string `json:"time"`
+	Message string `json:"message"`
+}
+
+// adapterLogMu guards adapterLogRing - appendAdapterLogLines is called from
+// the poll loop goroutine, and the HTTP handler reading it back
+// (currentAdapterLog) runs on a different goroutine entirely.
+var (
+	adapterLogMu   sync.Mutex
+	adapterLogRing []adapterLogEntry
+)
+
+// resetAdapterLog clears the activity log - called whenever a (different)
+// adapter starts running, so one adapter's log never bleeds into another's.
+func resetAdapterLog() {
+	adapterLogMu.Lock()
+	defer adapterLogMu.Unlock()
+	adapterLogRing = nil
+}
+
+func appendAdapterLog(message string) {
+	adapterLogMu.Lock()
+	defer adapterLogMu.Unlock()
+	adapterLogRing = append(adapterLogRing, adapterLogEntry{
+		Time:    time.Now().Format(time.RFC3339),
+		Message: message,
+	})
+	if over := len(adapterLogRing) - adapterLogMaxEntries; over > 0 {
+		adapterLogRing = adapterLogRing[over:]
+	}
+}
+
+func currentAdapterLog() []adapterLogEntry {
+	adapterLogMu.Lock()
+	defer adapterLogMu.Unlock()
+	out := make([]adapterLogEntry, len(adapterLogRing))
+	copy(out, adapterLogRing)
+	return out
+}
+
+// appendAdapterLogLines splits one log() call's result on "\n" (same
+// multi-line convention as poll's text) and appends each as its own entry -
+// empty lines are skipped so a trailing "\n" or a blank gap doesn't clutter
+// the ring with nothing.
+func appendAdapterLogLines(raw string) {
+	if raw == "" {
+		return
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		if line == "" {
+			continue
+		}
+		if len(line) > adapterLogMaxLineBytes {
+			line = line[:adapterLogMaxLineBytes]
+		}
+		appendAdapterLog(line)
+	}
+}
 
 // adapterHTTPClient is deliberately shared/plain - the adapter only ever
 // supplies a URL string, the actual request is ordinary Go net/http, no
@@ -236,6 +328,8 @@ type wasmAdapter struct {
 	configureFn  api.Function
 	pollFn       api.Function
 	infoFn       api.Function
+	statusFn     api.Function
+	logFn        api.Function
 }
 
 // adapterInfoMaxFieldLen matches the ABI doc: no field in info() - required
@@ -312,6 +406,8 @@ func loadWasmAdapter(ctx context.Context, wasmBytes []byte) (*wasmAdapter, error
 		configureFn:  mod.ExportedFunction("configure"),
 		pollFn:       mod.ExportedFunction("poll"),
 		infoFn:       mod.ExportedFunction("info"),
+		statusFn:     mod.ExportedFunction("status"),
+		logFn:        mod.ExportedFunction("log"),
 	}
 	var missing []string
 	if a.alloc == nil {
@@ -328,6 +424,12 @@ func loadWasmAdapter(ctx context.Context, wasmBytes []byte) (*wasmAdapter, error
 	}
 	if a.infoFn == nil {
 		missing = append(missing, "info")
+	}
+	if a.statusFn == nil {
+		missing = append(missing, "status")
+	}
+	if a.logFn == nil {
+		missing = append(missing, "log")
 	}
 	if len(missing) > 0 {
 		mod.Close(ctx)
@@ -406,6 +508,64 @@ func (a *wasmAdapter) Poll(ctx context.Context) (string, error) {
 	return a.readString(ctx, res[0])
 }
 
+// adapterStatusOK/adapterStatusError are the ONLY values the "state" field
+// of status() may hold - the app defines this closed set, not the adapter.
+// An adapter is free to put whatever text it wants in "message" (that part
+// IS the adapter's own business - the reason/detail), but "state" itself is
+// a fixed enum so the Settings UI can render a known, finite set of
+// statuses (icon/color per state) instead of handling arbitrary strings
+// from an untrusted module.
+const (
+	adapterStatusOK    = "ok"
+	adapterStatusError = "error"
+)
+
+// Status calls the adapter's status() export. Unlike Poll, a trap here is
+// never allowed to take down the adapter - status is informational only -
+// so any failure (trap, unparsable JSON, missing/unknown "state") is
+// swallowed and reported back as adapterStatusOK/"" rather than propagated.
+func (a *wasmAdapter) Status(ctx context.Context) (state, message string) {
+	res, err := a.statusFn.Call(ctx)
+	if err != nil {
+		return adapterStatusOK, ""
+	}
+	raw, err := a.readString(ctx, res[0])
+	if err != nil || raw == "" {
+		return adapterStatusOK, ""
+	}
+	var parsed struct {
+		State   string `json:"state"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal([]byte(raw), &parsed) != nil {
+		return adapterStatusOK, ""
+	}
+	switch parsed.State {
+	case adapterStatusOK, adapterStatusError:
+		return parsed.State, parsed.Message
+	default:
+		// Not one of the app's defined states (missing, typo, an adapter
+		// trying to invent its own) - never pass an unknown value through.
+		return adapterStatusOK, ""
+	}
+}
+
+// Log calls the adapter's log() export - same pull pattern, same
+// never-trap-the-caller treatment as Status: any failure here is just
+// treated as "nothing to log this tick", never surfaced as an adapter
+// error.
+func (a *wasmAdapter) Log(ctx context.Context) string {
+	res, err := a.logFn.Call(ctx)
+	if err != nil {
+		return ""
+	}
+	raw, err := a.readString(ctx, res[0])
+	if err != nil {
+		return ""
+	}
+	return raw
+}
+
 // --- lifecycle: one adapter + poll loop running at a time, swappable from
 // the HTTP handlers below without restarting the app. ---
 
@@ -421,8 +581,15 @@ func stopWasmAdapter() {
 		cancel()
 	}
 	wasmLoopCancel.Store((func())(nil))
-	latestAdapterText.Store("") // leaving adapter mode: stop showing its last output
+	latestAdapterText.Store("")                // leaving adapter mode: stop showing its last output
+	latestAdapterStatus.Store(adapterStatus{}) // and its last self-reported status
 }
+
+// startWasmAdapter already calls stopWasmAdapter first (any previous run),
+// so the log ring is cleared there via resetAdapterLog below - called once
+// right before actually starting the new loop, not inside stopWasmAdapter
+// itself, so a plain "turn adapter mode off" doesn't wipe the log the user
+// might still want to read right after it failed.
 
 // currentText is what GET /text should actually return: the adapter's
 // latest output while it's switched on and has produced something, or
@@ -532,6 +699,7 @@ func startWasmAdapter(appCtx context.Context) error {
 	wasmLoopMu.Unlock()
 	lastAdapterError.Store("")
 
+	resetAdapterLog()
 	interval := pollInterval(configJSON)
 	go runWasmAdapterLoop(ctx, appCtx, adapter, interval)
 	return nil
@@ -545,6 +713,22 @@ func startWasmAdapter(appCtx context.Context) error {
 // /text reads this instead of settings.Text while AdapterEnabled is true
 // (see the /text handler in app.go).
 var latestAdapterText atomic.Value // string
+
+// latestAdapterStatus holds the active adapter's own self-reported status
+// (via status(), called after every poll()) - independent of
+// lastAdapterError, which only ever records the app's own trap-fallback
+// reason. Reset to empty whenever the loop stops, same as latestAdapterText.
+type adapterStatus struct {
+	State   string `json:"state"`
+	Message string `json:"message"`
+}
+
+var latestAdapterStatus atomic.Value // adapterStatus
+
+func currentAdapterStatus() adapterStatus {
+	v, _ := latestAdapterStatus.Load().(adapterStatus)
+	return v
+}
 
 // runWasmAdapterLoop feeds every non-empty poll() result straight to the
 // widget - normalizeText + latestAdapterText + EventsEmit, deliberately
@@ -568,6 +752,10 @@ func runWasmAdapterLoop(ctx, appCtx context.Context, adapter *wasmAdapter, inter
 			failed = true
 			return
 		}
+		state, message := adapter.Status(ctx)
+		latestAdapterStatus.Store(adapterStatus{State: state, Message: message})
+		appendAdapterLogLines(adapter.Log(ctx))
+
 		if text == "" {
 			return
 		}

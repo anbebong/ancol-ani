@@ -15,10 +15,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
-//go:embed all:frontend/dist
+//go:embed all:widget/dist
 var assets embed.FS
 
-//go:embed all:settingswin
+//go:embed all:settings-main
 var settingsWinAssets embed.FS
 
 func main() {
@@ -115,13 +115,13 @@ func acquireSingleInstanceLock() bool {
 // widget - whose only page immediately navigates its real WebView2 to the
 // already-running local settings server (startLocalServer in app.go), the
 // same page a browser would open. Loading a single inline redirect page
-// like this, instead of embedding web/dist a second time, means the
+// like this, instead of embedding settings-ui/dist a second time, means the
 // settings page's own fetch('/text'), fetch('/position') etc. resolve
 // against that server's origin like they already do for any browser tab
 // open on it - not against Wails' own internal asset origin.
 //
 // This window has no Bind, so its page can't call a Go method the way
-// frontend/index.html calls LocalPort(). It's also a separate OS process
+// widget/index.html calls LocalPort(). It's also a separate OS process
 // from the widget, so it can't read activePort (an in-memory var) either
 // - the widget process saves the port it actually bound to into
 // settings.data's Port field (resolveListener/startup in app.go), and
@@ -135,7 +135,7 @@ func runSettingsApp() {
 		return
 	}
 
-	raw, err := settingsWinAssets.ReadFile("settingswin/index.html")
+	raw, err := settingsWinAssets.ReadFile("settings-main/index.html")
 	if err != nil {
 		println("Error:", err.Error())
 		return

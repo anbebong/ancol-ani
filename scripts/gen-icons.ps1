@@ -152,5 +152,5 @@ Save-Bytes 'ui/assets/logo.png' (Render-NavbarLogo 256)
 
 Write-Host ""
 Write-Host "Done. Next steps:"
-Write-Host "  1. Bump ?v= on the icon <link> tags in cmd/syncserver/portal/index.html and web/index.html so browsers drop the cached favicon."
-Write-Host "  2. Rebuild: cd cmd/syncserver/portal && npm run build ; cd web && npm run build ; wails build"
+Write-Host "  1. Bump ?v= on the icon <link> tags in cmd/syncserver/portal/index.html and settings-ui/index.html so browsers drop the cached favicon."
+Write-Host "  2. Rebuild: cd cmd/syncserver/portal && npm run build ; cd settings-ui && npm run build ; wails build"

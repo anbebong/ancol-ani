@@ -1,8 +1,8 @@
 build/bin
 node_modules
-frontend/dist
-frontend/wailsjs/go
-web/dist
+widget/dist
+widget/wailsjs/go
+settings-ui/dist
 cmd/syncserver/portal/dist
 data/
 *.exe

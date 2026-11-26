@@ -3,8 +3,8 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { errMsg } from '../api.js';
 import { signIn, sendTokenToClient } from '../session.js';
-import Icon from '@ui/components/Icon.vue';
-import AppLogo from '@ui/components/AppLogo.vue';
+import Icon from '@theme/components/Icon.vue';
+import AppLogo from '@theme/components/AppLogo.vue';
 
 const route = useRoute();
 const router = useRouter();

@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { session, issueToken, signIn, loadMe, signOut } from '../session.js';
-import AppLogo from '@ui/components/AppLogo.vue';
+import AppLogo from '@theme/components/AppLogo.vue';
 
 // #/sso?t=<token>&to=<path> - opened by the desktop app's settings page
 // ("Mở portal"). Trades the app's token for this portal's own session, so

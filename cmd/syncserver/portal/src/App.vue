@@ -2,8 +2,8 @@
 import { computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { session, loadMe, signOut } from './session.js';
-import Icon from '@ui/components/Icon.vue';
-import AppLogo from '@ui/components/AppLogo.vue';
+import Icon from '@theme/components/Icon.vue';
+import AppLogo from '@theme/components/AppLogo.vue';
 
 const route = useRoute();
 const router = useRouter();

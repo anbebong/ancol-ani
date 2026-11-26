@@ -21,6 +21,46 @@ Mọi adapter phải export đúng các hàm sau (tên và kiểu phải khớp 
 | `configure` | `(i32, i32) -> ()` | App gọi 1 lần mỗi khi cấu hình được lưu, tham số là `(ptr, len)` của chuỗi JSON giá trị khách đã điền (key khớp `config_schema`). Adapter tự lưu lại nội bộ để `poll` dùng sau. |
 | `poll` | `() -> i64` | App gọi theo chu kỳ. Trả về **packed(ptr, len)** của chuỗi text cần hiển thị (rỗng = "chưa có gì mới, giữ nguyên"). Nhiều dòng (`\n`) = nhiều câu xoay vòng trên widget, giống hệt gõ tay nhiều dòng. |
 
+### `status` - bắt buộc
+
+| Hàm | Kiểu | Mô tả |
+|---|---|---|
+| `status` | `() -> i64` | App gọi ngay sau mỗi lần `poll` (dù `poll` trả chữ mới hay rỗng). packed(ptr, len) của 1 chuỗi JSON object: `{"state":"ok"}` hoặc `{"state":"error","message":"..."}`. |
+
+`state` là **enum đóng do app định nghĩa**, hiện chỉ có 2 giá trị: `"ok"` và
+`"error"` - adapter không được tự đặt thêm giá trị khác. Trả rỗng/JSON
+hỏng/thiếu `state`/`state` không nằm trong 2 giá trị trên đều bị app coi là
+`"ok"`, không có ngoại lệ.
+
+`message` thì ngược lại - **là phần của adapter**: tùy chọn, tự do ghi gì
+cũng được (lý do lỗi, chi tiết...), app không đọc/kiểm tra nội dung, chỉ
+hiển thị nguyên văn.
+
+`status` chỉ để hiển thị cho người dùng biết adapter đang chạy ổn hay đang
+gặp khó khăn tạm thời, **không** làm app tự fallback về Thủ công (chỉ
+`poll` trap mới làm vậy - xem mục Vòng đời & lỗi). Ví dụ dùng: adapter tự
+bắt lỗi fetch rỗng từ `http_fetch` (không trap), trả `poll()` rỗng ("chưa
+có gì mới") nhưng `status()` báo `{"state":"error","message":"Không gọi
+được API"}` để Settings hiện cho người dùng biết lý do.
+
+### `log` - bắt buộc
+
+| Hàm | Kiểu | Mô tả |
+|---|---|---|
+| `log` | `() -> i64` | App gọi ngay sau `status()` mỗi tick. packed(ptr, len) của 1 chuỗi text các dòng hoạt động muốn hiển thị, **nhiều dòng tách bằng `\n`** - cùng quy ước với nhiều câu xoay vòng của `poll`. Rỗng = không có gì mới lần này. |
+
+Cùng pattern pull với `poll`/`status` - adapter không bao giờ tự gọi ra
+ngoài, chỉ trả lại khi được hỏi. Adapter tự tích lũy log nội bộ (bắt đầu
+gọi API nào, parse lỗi ra sao, retry lần mấy...) rồi trả hết ra 1 lần ở
+đây - đây là cách duy nhất để thấy "adapter đang làm gì" ngoài
+`poll()`/`status()`, vì adapter không có filesystem/stdout trong sandbox.
+
+- Mỗi dòng tối đa 2KB (dài hơn bị cắt).
+- App giữ tối đa 100 dòng gần nhất trong RAM (ring buffer), **không ghi
+  file, không gửi cloud** - mất khi tắt app hoặc khi đổi sang adapter khác
+  (log không lẫn giữa các adapter).
+- Đọc lại qua `GET /text-adapter`, field `"log"` (mảng `{"time","message"}`).
+
 ### `info` - bắt buộc
 
 | Hàm | Kiểu | Mô tả |
@@ -63,7 +103,7 @@ tuyến tính (linear memory) của chính adapter.
 
 ## Host import - cách duy nhất gọi mạng
 
-wasm không có socket. App cấp sẵn 1 import duy nhất:
+wasm không có socket. App cấp sẵn:
 
 ```
 env.http_fetch: (urlPtr i32, urlLen i32) -> i64   // packed(respPtr, respLen)

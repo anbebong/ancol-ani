@@ -28,14 +28,14 @@ Hình: chữ **A** màu tím than (`#1f1635`) kèm các nút mạng ở góc tr�
 
 ### Hai giao diện web: portal của server và trang settings của client
 
-Hai trang dùng **chung một bộ icon** (xem thư mục `ui/` trong `DEV-NOTES.md`).
+Hai trang dùng **chung một bộ icon** (xem thư mục `theme/` trong `DEV-NOTES.md`).
 
 | File | Kích thước | Nền | Dùng ở đâu |
 |---|---|---|---|
-| `ui/assets/logo.png` | 64 (hiện tại) | trong suốt | **Logo trên thanh điều hướng** của cả hai trang, và **cạnh tên Ancol-Ani ở trang đăng nhập** của portal. Hiển thị qua component dùng chung `ui/components/AppLogo.vue` (ô nền sáng do CSS vẽ). Vite nhúng thẳng vào JS dạng base64 vì file nhỏ hơn 4KB. |
-| `cmd/syncserver/portal/public/favicon.ico`<br>`web/public/favicon.ico` | 16, 32, 48, 64 | **ô nền sáng bo góc** | **Favicon trên tab trình duyệt**: portal (`:9090`) và trang settings (`localhost:8788`). |
-| `cmd/syncserver/portal/public/favicon-32.png`<br>`web/public/favicon-32.png` | 32 | **ô nền sáng bo góc** | Favicon dạng PNG (trình duyệt hiện đại ưu tiên file này). |
-| `cmd/syncserver/portal/public/apple-touch-icon.png`<br>`web/public/apple-touch-icon.png` | 180 | **nền sáng kín** | Icon khi "Thêm vào màn hình chính" trên iPhone/iPad. |
+| `theme/assets/logo.png` | 64 (hiện tại) | trong suốt | **Logo trên thanh điều hướng** của cả hai trang, và **cạnh tên Ancol-Ani ở trang đăng nhập** của portal. Hiển thị qua component dùng chung `theme/components/AppLogo.vue` (ô nền sáng do CSS vẽ). Vite nhúng thẳng vào JS dạng base64 vì file nhỏ hơn 4KB. |
+| `cmd/syncserver/portal/public/favicon.ico`<br>`settings-ui/public/favicon.ico` | 16, 32, 48, 64 | **ô nền sáng bo góc** | **Favicon trên tab trình duyệt**: portal (`:9090`) và trang settings (`localhost:8788`). |
+| `cmd/syncserver/portal/public/favicon-32.png`<br>`settings-ui/public/favicon-32.png` | 32 | **ô nền sáng bo góc** | Favicon dạng PNG (trình duyệt hiện đại ưu tiên file này). |
+| `cmd/syncserver/portal/public/apple-touch-icon.png`<br>`settings-ui/public/apple-touch-icon.png` | 180 | **nền sáng kín** | Icon khi "Thêm vào màn hình chính" trên iPhone/iPad. |
 
 Hai thư mục `public/` có file giống hệt nhau. Mỗi project build và nhúng `dist/` riêng (portal vào `syncserver.exe`, trang settings vào `ancol-ani.exe`), mà Vite chỉ chép `public/` của chính project đó, nên mỗi bên phải có một bản. Script ghi cả hai.
 
@@ -48,7 +48,7 @@ Icon là **hình màu tối trên nền trong suốt**. Đặt lên nền tối 
 - **iOS tô đen phần trong suốt** của apple-touch-icon → file này dùng nền sáng kín.
 - **Icon .exe, bộ cài, icon Windows**: hiện trên nền sáng hoặc do hệ điều hành tự xử lý nên để nền trong suốt.
 
-Đổi màu ô nền thì sửa **cả hai chỗ** cho đồng bộ: biến `$TileColor` trong `scripts/gen-icons.ps1` và `background` trong `ui/components/AppLogo.vue`.
+Đổi màu ô nền thì sửa **cả hai chỗ** cho đồng bộ: biến `$TileColor` trong `scripts/gen-icons.ps1` và `background` trong `theme/components/AppLogo.vue`.
 
 ---
 
@@ -58,7 +58,7 @@ Không phải icon nhưng cũng là ảnh nhận diện. Có **3 bản giống h
 
 | File | Dùng ở đâu |
 |---|---|
-| `frontend/src/mascot.gif` | **GIF mặc định của widget desktop**. `app.go` nhúng file này bằng `//go:embed` (biến `defaultGif`) và dùng khi người dùng chưa chọn GIF nào. |
+| `widget/src/mascot.gif` | **GIF mặc định của widget desktop**. `app.go` nhúng file này bằng `//go:embed` (biến `defaultGif`) và dùng khi người dùng chưa chọn GIF nào. |
 | `mascot.gif` (thư mục gốc) | Bản lưu ở thư mục gốc repo, không có code nào đọc. |
 | `cmd/syncserver/portal/src/assets/mascot.gif` | Mascot nhún nhảy phía trên **card đăng nhập** của portal (`LoginView.vue`). |
 
@@ -68,13 +68,13 @@ Script **không** xử lý mascot. Muốn đổi thì copy file GIF mới đè l
 
 ## 3. Đã làm thế nào (11/2026)
 
-1. **Lấy ảnh 64px từ `ancol.ico`** bằng `System.Drawing.Icon` (PowerShell). File `.ico` chỉ có đúng 1 ảnh 64×64 32-bit; kết quả lưu thành `logo.png` (nay ở `ui/assets/logo.png`).
+1. **Lấy ảnh 64px từ `ancol.ico`** bằng `System.Drawing.Icon` (PowerShell). File `.ico` chỉ có đúng 1 ảnh 64×64 32-bit; kết quả lưu thành `logo.png` (nay ở `theme/assets/logo.png`).
 2. **`build/appicon.png`**: phóng 64 → 1024 bằng nội suy HighQualityBicubic, thay logo "W" của Wails.
 3. **Favicon**: vẽ ô nền sáng bo góc (bán kính 22%) rồi đặt icon vào giữa, cách viền 10%. Đóng gói nhiều cỡ (16/32/48/64) vào một file `.ico` có các ảnh nén PNG bên trong; trình duyệt và Windows Vista trở lên đều đọc được. Ban đầu chỉ làm cho portal, sau đó dùng chung cho cả trang settings khi hai bên đồng bộ thiết kế.
 4. **apple-touch-icon**: ảnh 180px, nền sáng kín, cách viền 22px.
 5. **Logo trong trang** (`AppLogo.vue`): component nhận prop `size`. Padding tính bằng **px** (12% của `size`), **không dùng `%` trong CSS**. Lý do: `padding: 12%` tính theo bề rộng của *phần tử cha*, có lúc padding to hơn cả ô logo và ảnh bị co về 0×0. Lỗi này đã xảy ra một lần: logo chỉ hiện ô trắng trống.
 6. **Chống cache favicon**: các thẻ `<link rel="icon">` trong `index.html` của cả hai trang có đuôi `?v=2`. Trình duyệt cache favicon rất lâu; lúc trước `/favicon.ico` từng trả về 404 nên tab vẫn hiện icon cũ dù server đã có file mới.
-7. Xóa code mẫu "Greet" của Wails (`frontend/src/main.js`, `app.css`, `style.css`, `logo-universal.png`, font Nunito), vì widget chỉ load `gifPlayer.js`.
+7. Xóa code mẫu "Greet" của Wails (`widget/src/main.js`, `app.css`, `style.css`, `logo-universal.png`, font Nunito), vì widget chỉ load `gifPlayer.js`.
 
 Toàn bộ quy trình trên (trừ bước 5 và 7) giờ nằm trong `scripts/gen-icons.ps1`.
 
@@ -91,10 +91,10 @@ Toàn bộ quy trình trên (trừ bước 5 và 7) giờ nằm trong `scripts/g
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts/gen-icons.ps1 -Source logo.png
    ```
-4. **Tăng `?v=`** (vd `?v=2` → `?v=3`) trên các thẻ `<link>` icon trong **cả** `cmd/syncserver/portal/index.html` **và** `web/index.html`.
+4. **Tăng `?v=`** (vd `?v=2` → `?v=3`) trên các thẻ `<link>` icon trong **cả** `cmd/syncserver/portal/index.html` **và** `settings-ui/index.html`.
 5. Build lại và khởi động lại (xem `DEV-NOTES.md` mục 2, nhớ tắt process cũ trước):
    - Portal: `cd cmd/syncserver/portal && npm run build`, rồi build và chạy lại syncserver (server nhúng `portal/dist` lúc build).
-   - Trang settings: `cd web && npm run build`, rồi `wails build -s` (app nhúng `web/dist`).
+   - Trang settings: `cd settings-ui && npm run build`, rồi `wails build -s` (app nhúng `settings-ui/dist`).
    - Icon file .exe: `wails build`.
 6. Kiểm tra: tab trình duyệt của cả hai trang (thử cả giao diện sáng và tối), logo trên thanh điều hướng và trang đăng nhập, icon file `.exe` trong Explorer.
 
