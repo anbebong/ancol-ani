@@ -614,6 +614,7 @@ func (a *App) startup(ctx context.Context) {
 	go func() {
 		if err := startWasmAdapter(ctx); err != nil {
 			runtime.LogError(ctx, "startWasmAdapter: "+err.Error())
+			logError("startWasmAdapter: %s", err.Error())
 		}
 	}()
 }
@@ -898,7 +899,7 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		if raw, err := os.ReadFile(adapterConfigPath(id)); err == nil {
+		if raw, err := readAdapterJSON(adapterConfigPath(id)); err == nil && raw != nil {
 			w.Write(raw)
 			return
 		}

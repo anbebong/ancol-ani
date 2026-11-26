@@ -227,6 +227,34 @@ func adapterWasmPath(id string) string   { return filepath.Join(adapterDir(id), 
 func adapterConfigPath(id string) string { return filepath.Join(adapterDir(id), "config.json") }
 func adapterInfoPath(id string) string   { return filepath.Join(adapterDir(id), "info.json") }
 
+// writeAdapterJSON/readAdapterJSON seal config.json/info.json the same way
+// settings.data already is (encryptSettings/decryptSettings, app.go) -
+// config.json in particular can hold whatever an adapter's config_schema
+// asked for, including something like an api_key, so it gets the same
+// "not grep-able plaintext on disk" treatment as the rest of the app's own
+// settings, not a separate scheme.
+func writeAdapterJSON(path string, data []byte) error {
+	sealed, err := encryptSettings(data)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, sealed, 0o644)
+}
+
+// readAdapterJSON returns (nil, nil) for a missing file, same as the raw
+// os.ReadFile callers used to get - callers already handle that as "use
+// defaults", not as an error.
+func readAdapterJSON(path string) ([]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return decryptSettings(raw)
+}
+
 var adapterIDRe = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
 // newAdapterID turns an uploaded filename into a short, filesystem-safe,
@@ -264,8 +292,8 @@ type adapterListEntry struct {
 // the raw id as name if the file is somehow missing/unreadable rather
 // than failing the whole list.
 func readAdapterInfo(id string) map[string]any {
-	raw, err := os.ReadFile(adapterInfoPath(id))
-	if err != nil {
+	raw, err := readAdapterJSON(adapterInfoPath(id))
+	if err != nil || raw == nil {
 		return map[string]any{"name": id}
 	}
 	var info map[string]any
@@ -619,7 +647,7 @@ var lastAdapterError atomic.Value // string
 // stack trace, not something a user should ever see); log that for
 // debugging and store a plain-language reason instead.
 func disableAdapterOnError(appCtx context.Context, rawErr error) {
-	debugLogEmit("adapter error (fell back to manual): " + rawErr.Error())
+	logError("adapter fell back to manual: %s", rawErr.Error())
 	lastAdapterError.Store("Module gặp lỗi khi lấy dữ liệu")
 	saveSettings(func(s *widgetSettings) { s.AdapterEnabled = false })
 	stopWasmAdapter()
@@ -676,7 +704,7 @@ func startWasmAdapter(appCtx context.Context) error {
 		return err
 	}
 	configJSON := "{}"
-	if raw, err := os.ReadFile(adapterConfigPath(id)); err == nil {
+	if raw, err := readAdapterJSON(adapterConfigPath(id)); err == nil && raw != nil {
 		configJSON = string(raw)
 	}
 
@@ -818,9 +846,9 @@ func importWasmAdapter(appCtx context.Context, filename string, wasmBytes []byte
 	if err := os.WriteFile(adapterWasmPath(id), wasmBytes, 0o644); err != nil {
 		return "", "", err
 	}
-	os.WriteFile(adapterConfigPath(id), []byte("{}"), 0o644)
+	writeAdapterJSON(adapterConfigPath(id), []byte("{}"))
 	infoJSON, _ := json.Marshal(info)
-	os.WriteFile(adapterInfoPath(id), infoJSON, 0o644)
+	writeAdapterJSON(adapterInfoPath(id), infoJSON)
 
 	return id, schema, nil
 }
@@ -846,7 +874,7 @@ func selectAdapter(appCtx context.Context, id string) error {
 // it - no app restart needed. Saving a non-active adapter's config just
 // updates its file for whenever it's selected later.
 func saveWasmAdapterConfig(appCtx context.Context, id, configJSON string) error {
-	if err := os.WriteFile(adapterConfigPath(id), []byte(configJSON), 0o644); err != nil {
+	if err := writeAdapterJSON(adapterConfigPath(id), []byte(configJSON)); err != nil {
 		return err
 	}
 	settings := getSettings()
@@ -894,19 +922,6 @@ func currentWasmAdapterSchema(appCtx context.Context, id string) (string, error)
 // something a test harness, or any future caller that's not 100% sure its
 // ctx came from a.startup, cannot safely risk.
 var emitServerText = func(ctx context.Context, text string) {
-	debugLogEmit(text)
+	logInfo("server-text: %q", text)
 	runtime.EventsEmit(ctx, "server-text", text)
-}
-
-// debugLogEmit: TEMPORARY - appends every emitServerText call to a plain
-// file so it can be inspected directly instead of relying on someone
-// watching the widget at the exact right second. Remove once the adapter
-// feature is confirmed working end-to-end.
-func debugLogEmit(text string) {
-	f, err := os.OpenFile(filepath.Join(appDataDir(), "debug-emit.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s emit server-text: %q\n", time.Now().Format(time.RFC3339), text)
 }
