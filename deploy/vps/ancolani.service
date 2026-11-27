@@ -1,0 +1,20 @@
+[Unit]
+Description=Ancol-ani sync server
+After=network.target
+
+[Service]
+Type=simple
+User=an
+WorkingDirectory=/home/an/ancolani
+EnvironmentFile=/home/an/ancolani/.env
+ExecStart=/home/an/ancolani/ancolani-sync-amd64
+Restart=on-failure
+RestartSec=5
+
+# Hardening nhẹ, không chặn việc server đọc/viết data/ trong WorkingDirectory
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

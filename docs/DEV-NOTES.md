@@ -191,6 +191,39 @@ Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mo
 - Ngược lại: **đừng chạy `deploy-arm.sh` của dino-race** nếu muốn giữ Ancol-Ani, vì nó sẽ đưa dino-race trở lại cổng 7879.
 - `deploy/phone/maintenance-on.sh` là bản của repo này: giống bản dino-race nhưng kill thêm `ancolani-sync-arm64`.
 
+## 10b. Deploy sync server lên VPS
+
+Một bản triển khai thứ hai, độc lập với điện thoại (mục 10) — VPS riêng (Ubuntu 24.04, x86_64), chạy qua **systemd** thật (không cần proot/tmux như Termux), domain hiện tại: **https://ani.anbebong.io.vn**.
+
+**Thông tin server (IP, user, port) không nằm trong repo** — chỉ ở file `deploy/vps/vps.env` trên máy dev (git-ignored) và file `vps-info.txt` ở gốc repo (cũng git-ignored). Lần đầu set up máy dev mới: copy `deploy/vps/vps.env.example` thành `vps.env`, điền IP/port/đường dẫn SSH key thật.
+
+**Deploy (1 lệnh, từ gốc repo trên Windows, Git Bash):**
+```bash
+bash deploy/vps/deploy.sh
+```
+Script build portal + syncserver `linux/amd64` (CGO tắt), SSH bằng `root` (chỉ để làm việc cần quyền hệ thống: systemctl, ghi unit file, chown — không cần sửa sudoers trên VPS), dừng service cũ, **sao lưu DB**, upload, cài/khởi động lại `systemd` unit `ancolani`, rồi chờ `http://localhost:9090/` trên VPS trả 200.
+
+| Thứ | Ở đâu |
+|---|---|
+| Service chạy app | `systemd` unit `ancolani` (nguồn: `deploy/vps/ancolani.service`), `User=an` — **không chạy bằng root** |
+| Bind | `ADDR=127.0.0.1:9090` trong `.env` — **không public port 9090 ra Internet**, chỉ tunnel/`localhost` truy cập được |
+| Public truy cập | Cloudflare Tunnel: service hệ thống riêng `cloudflared` (`cloudflared service install <token>`, tạo sẵn unit `cloudflared.service`), kết nối outbound tới Cloudflare — không mở port inbound nào thêm. Route `ani.anbebong.io.vn → localhost:9090` khai báo trên Cloudflare Dashboard (Zero Trust > Networks > Tunnels), không có trong repo |
+| Binary | `~/ancolani/ancolani-sync-amd64` (ghi đè mỗi lần deploy) |
+| Dữ liệu | `~/ancolani/data/ancol-ani.db`: dữ liệu thật, deploy không đụng tới |
+| Backup DB | Giống mục 10 (điện thoại): kéo về `deploy/backup/` trong repo (git-ignored), so sha256. Biến `LOCAL_BACKUP_DIR` dùng chung với bản điện thoại — đổi nếu muốn tách riêng |
+| JWT secret | `~/ancolani/.jwt-secret` (chmod 600), sinh ngẫu nhiên lần deploy đầu |
+| Log app | `ssh ancolani-vps-root journalctl -u ancolani -f` |
+| Log tunnel | `ssh ancolani-vps-root journalctl -u cloudflared -f` |
+
+- Cấp quyền admin: `ssh ancolani-vps "cd ancolani && ./ancolani-sync-amd64 -make-admin <username>"`.
+- SSH vào VPS: chỉ bằng key (đã tắt `PasswordAuthentication`), đổi port mặc định sang port khác 22. User thường `an` (nhóm `sudo`) để làm việc hàng ngày; `root` dùng riêng cho các việc cần quyền hệ thống khi deploy/vận hành.
+- **Firewall — 2 lớp độc lập, cả hai đều chặn mặc định và chỉ mở đúng port SSH:**
+  1. **Firewall hạ tầng** (trang console/security network của nhà cung cấp VPS, ngoài phạm vi SSH/`ufw`) — rule mặc định là `Deny Any/Any/Any`, phải tự thêm rule `Accept IN` cho port SSH mới vào được. Cấu hình ở đây **không nằm trong repo**, chỉ thao tác qua web console của nhà cung cấp.
+  2. **`ufw` trong hệ điều hành** — `default deny incoming`, `allow outgoing`, chỉ allow port SSH (`ufw allow <port>/tcp`). Giữ lớp này dù lớp 1 đã chặn, đề phòng rule ở lớp 1 bị đổi/tắt nhầm, và chặn được cả traffic nội bộ cùng datacenter nếu có (lớp 1 có thể chỉ lọc traffic từ Internet công cộng).
+  - Port app (9090) không mở ở cả hai lớp — chỉ truy cập được qua Cloudflare Tunnel (outbound, không cần mở inbound). Đã xác nhận quét từ ngoài: chỉ port SSH mở, mọi port khác (80, 443, 9090, database...) đều đóng.
+  - **Đổi port SSH hoặc deploy thêm service mới cần public thì phải sửa rule ở CẢ HAI lớp**, thiếu 1 trong 2 là vẫn không vào được dù lớp kia đã đúng.
+- Hai bản deploy (điện thoại mục 10, VPS mục 10b) là **hai server độc lập, hai DB SQLite riêng, hai domain riêng** (`game.anbebong.io.vn` vs `ani.anbebong.io.vn`) — không đồng bộ dữ liệu giữa hai bên.
+
 ## 11. Giới hạn bảo mật của sync server (đang public)
 
 | Bảo vệ | Ở đâu | Giới hạn |
@@ -204,4 +237,5 @@ Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mo
 
 - **IP thật:** request đi qua cloudflared trên chính điện thoại (kết nối loopback), nên IP người dùng lấy từ header `CF-Connecting-IP`. Header này **chỉ được tin khi kết nối đến từ loopback** (`clientIP()` trong `ratelimit.go`); ai gọi thẳng cổng 7879 từ LAN không giả được. Đã kiểm chứng trên điện thoại: mỗi IP có bộ đếm riêng.
 - Bộ đếm nằm trong RAM: khởi động lại server là reset. Đủ để làm chậm dò mật khẩu/spam trên 1 server nhỏ.
-- Còn chưa làm (mức trung bình/thấp): timeout cho HTTP server, header bảo mật (CSP, `X-Frame-Options`, `nosniff`), bind `127.0.0.1` thay vì `0.0.0.0`, `jwt.WithValidMethods`.
+- Còn chưa làm (mức trung bình/thấp): timeout cho HTTP server, header bảo mật (CSP, `X-Frame-Options`, `nosniff`), `jwt.WithValidMethods`.
+- Bind `127.0.0.1` thay vì `0.0.0.0`: đã làm trên **VPS** (mục 10b, qua Cloudflare Tunnel, không port nào public — ai ngoài tunnel không gọi được server). Trên **điện thoại** (mục 10) server vẫn bind `0.0.0.0:7879` — ai cùng LAN với điện thoại gọi thẳng cổng đó được, bỏ qua Cloudflare hoàn toàn (rate-limit vẫn hoạt động vì `clientIP()` fallback về IP kết nối thật khi không phải loopback, chỉ là request không đi qua lớp bảo vệ của Cloudflare nữa).

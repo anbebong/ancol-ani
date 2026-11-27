@@ -40,7 +40,12 @@ Widget GIF/chữ góc màn hình cho Windows (Go + Wails), kèm trang settings l
 
 ## Production
 
-Sync server chạy công khai ở **https://game.anbebong.io.vn**, trên điện thoại Termux tự host (thay chỗ dino-race trên cổng 7879). Deploy bằng `bash deploy/phone/deploy.sh`, chi tiết ở DEV-NOTES mục 10. Domain gốc `anbebong.io.vn` là site khác, không phải server này. Deploy là thao tác công khai: hỏi người dùng trước khi chạy. Không đụng `~/ancolani/data/` và `~/ancolani/.jwt-secret` trên điện thoại.
+Hai bản triển khai sync server độc lập, **hai DB riêng, không đồng bộ với nhau**:
+
+- **Điện thoại** (Termux tự host, thay chỗ dino-race trên cổng 7879): **https://game.anbebong.io.vn**. Deploy: `bash deploy/phone/deploy.sh`, chi tiết DEV-NOTES mục 10.
+- **VPS** (Ubuntu, systemd, qua Cloudflare Tunnel): **https://ani.anbebong.io.vn**. Deploy: `bash deploy/vps/deploy.sh`, chi tiết DEV-NOTES mục 10b. Thông tin server (IP/port/SSH key) nằm ở `deploy/vps/vps.env` và `vps-info.txt` (gốc repo) — cả hai **git-ignored, không bao giờ commit**.
+
+Domain gốc `anbebong.io.vn` là site khác, không phải server này. Deploy là thao tác công khai: hỏi người dùng trước khi chạy. Không đụng `data/` và `.jwt-secret` của bất kỳ bản nào.
 
 ## Version & changelog
 

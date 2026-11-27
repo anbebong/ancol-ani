@@ -9,3 +9,4 @@ data/
 *.log
 tests/
 deploy/backup/
+deploy/vps/vps.env
