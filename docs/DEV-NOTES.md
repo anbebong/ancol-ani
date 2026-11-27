@@ -71,7 +71,14 @@ wails build -s        # -s = skip frontend build
 - `share_history`: log mỗi lần share/unshare theo `gif_id`.
 - `sessions`: JWT (1h) + revoke theo `jti` — logout = set `revoked_at`, không phải JWT thuần.
 
-**Lưu ý migration**: `CREATE TABLE IF NOT EXISTS` không tự thêm cột mới vào bảng đã tồn tại trên DB cũ. Cột `name`/`tags` thêm sau phải có bước `addColumnIfMissing` riêng trong `store.go::migrate()` (dùng `PRAGMA table_info` + `s.db.Unsafe()` vì PRAGMA trả nhiều cột hơn struct Go map).
+**Migration theo version** — file SQL ở `cmd/syncserver/migrations/<driver>/NNN_tên.sql` (`sqlite/`, `postgres/`), nhúng vào binary bằng `go:embed`; code chạy ở `migrations.go`.
+
+- DB ghi các version đã chạy vào bảng `schema_migrations`. Khi khởi động, server chạy các file còn thiếu theo số thứ tự, mỗi file trong 1 transaction cùng dòng ghi version: lỗi là rollback sạch, DB giữ version cũ và server không chạy (lỗi ghi rõ tên file).
+- Số file phải liên tục 001, 002, ... (thiếu/trùng số hoặc sai tên là server báo lỗi lúc khởi động). `sqlite/` và `postgres/` phải có cùng danh sách số + tên (có test).
+- DB có version cao hơn code (chạy binary cũ trên DB đã migrate bởi bản mới) thì server từ chối khởi động.
+- **Đổi schema = thêm file mới** `002_<tên>.sql` cho cả hai dialect. **Không sửa/đổi tên/đánh lại số file đã lên production** (DB đã ghi là chạy rồi nên sửa sẽ không bao giờ tới DB cũ).
+- `001_baseline.sql` là schema trước khi có hệ thống này, viết idempotent (`IF NOT EXISTS`) để nhận DB production cũ mà không đụng dữ liệu. Thứ SQL thuần không làm được thì đặt trong `afterSQL` (`migrations.go`), chạy cùng transaction ngay sau file đó; hiện chỉ có `addColumnIfMissing` cho `gifs.name`/`tags` trên SQLite (SQLite không có `ADD COLUMN IF NOT EXISTS`).
+- Test ở `migrate_test.go`.
 
 ## 4. API chính (syncserver)
 
@@ -166,13 +173,14 @@ Sync server chạy công khai tại **https://game.anbebong.io.vn**, trên đi�
 ```bash
 bash deploy/phone/deploy.sh
 ```
-Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mode, upload, khởi động lại rồi chờ `https://game.anbebong.io.vn` trả 200. Site gián đoạn khoảng 10–20 giây.
+Script build portal + syncserver `linux/arm64` (CGO tắt), bật maintenance mode, **sao lưu DB**, upload, khởi động lại rồi chờ `https://game.anbebong.io.vn` trả 200. Site gián đoạn khoảng 10–20 giây.
 
 | Thứ | Ở đâu |
 |---|---|
 | Tunnel ingress (cấu hình trên Cloudflare Dashboard) | `game.anbebong.io.vn` → `localhost:7879` (**Ancol-Ani**), `mothe.anbebong.io.vn` → `localhost:8080` (Ancha). Domain gốc `anbebong.io.vn` **không** đi qua tunnel này. |
 | Binary | `~/ancolani/ancolani-sync-arm64` (ghi đè mỗi lần deploy) |
 | Dữ liệu | `~/ancolani/data/ancol-ani.db`: **dữ liệu thật**, deploy không đụng tới. Không chép DB dev từ máy lên (có tài khoản test `demo/demo123`). |
+| Backup DB | **Trên máy dev**, không trên điện thoại: mỗi lần deploy, lúc server đã dừng, script kéo DB về `deploy/backup/ancol-ani-<YYYYmmdd-HHMMSS>.db` trong repo (git-ignored, đổi chỗ bằng biến `LOCAL_BACKUP_DIR`) và so sha256 hai đầu. Không tự xoá bản cũ. Backup lỗi thì script bật lại server cũ và dừng. Khôi phục: `~/maintenance-on.sh`, `scp` bản backup đè lên `~/ancolani/data/ancol-ani.db`, rồi `~/maintenance-off.sh`. |
 | JWT secret | `~/ancolani/.jwt-secret` (chmod 600), sinh ngẫu nhiên ở lần deploy đầu, giữ nguyên về sau. Đổi file này là mọi người bị đăng xuất. |
 | Vòng lặp chạy | `~/run.sh` (nguồn: `deploy/phone/run.sh`): Ancol-Ani :7879 + Ancha :8080 + cloudflared, trong proot, tmux session `dinorace`. |
 | Log | `~/dinorace-tunnel.log` (gộp cả 3) |

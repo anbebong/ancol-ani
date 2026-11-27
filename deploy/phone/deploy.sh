@@ -9,7 +9,10 @@
 #
 # Lam gi:
 #   1. Build portal (npm) + syncserver linux/arm64 (CGO tat, SQLite thuan Go).
-#   2. maintenance-on (dung server/tunnel cu an toan).
+#   2. maintenance-on (dung server/tunnel cu an toan), roi keo
+#      ~/ancolani/data/ancol-ani.db ve may nay: deploy/backup/ trong repo
+#      (git-ignored; doi bang bien LOCAL_BACKUP_DIR), so sha256. Backup loi
+#      thi bat lai server cu va dung, khong deploy.
 #   3. Upload binary vao ~/ancolani/, run.sh + maintenance-on.sh ban ancol-ani.
 #      Lan dau: sao luu ~/run.sh cu thanh ~/run.sh.dinorace-backup, tao
 #      ~/ancolani/.jwt-secret ngau nhien (chmod 600).
@@ -40,6 +43,35 @@ mkdir -p build/bin
 echo "== [3/5] Maintenance mode on (stops current server/tunnel) =="
 scp -P "$PORT" -o BatchMode=yes deploy/phone/maintenance-on.sh "$HOST:$REMOTE_HOME/maintenance-on.sh"
 $SSH "chmod +x '$REMOTE_HOME/maintenance-on.sh' && '$REMOTE_HOME/maintenance-on.sh'"
+
+echo "== [3b/5] Backup DB ve may nay =="
+# Server da dung (maintenance-on) nen DB tren dien thoai dang nhat quan.
+# Keo ve $LOCAL_BACKUP_DIR (git-ignored), so sha256 hai dau. Khong luu ban
+# backup nao tren dien thoai. Loi thi bat lai server cu va dung deploy.
+LOCAL_BACKUP_DIR="${LOCAL_BACKUP_DIR:-$REPO_ROOT/deploy/backup}"
+backup_db() {
+  local db="$REMOTE_DIR/data/ancol-ani.db"
+  if ! $SSH "[ -f '$db' ]"; then echo "   chua co DB tren dien thoai, bo qua"; return 0; fi
+  mkdir -p "$LOCAL_BACKUP_DIR"
+  local dst="$LOCAL_BACKUP_DIR/ancol-ani-$(date +%Y%m%d-%H%M%S).db"
+  local ext
+  for ext in "" -wal -shm; do
+    if [ -n "$ext" ] && ! $SSH "[ -f '$db$ext' ]"; then continue; fi
+    scp -P "$PORT" -o BatchMode=yes "$HOST:$db$ext" "$dst$ext" || return 1
+    local remote local_sum
+    remote=$($SSH "sha256sum '$db$ext'" | cut -d' ' -f1) || return 1
+    local_sum=$(sha256sum "$dst$ext" | cut -d' ' -f1)
+    if [ -z "$remote" ] || [ "$remote" != "$local_sum" ]; then
+      echo "   sha256 khong khop: ${ext:-db}"; return 1
+    fi
+  done
+  echo "   -> $dst ($(du -h "$dst" | cut -f1), sha256 khop)"
+}
+if ! backup_db; then
+  echo "   [ERROR] backup DB that bai - khoi dong lai server cu, KHONG deploy"
+  $SSH "'$REMOTE_HOME/maintenance-off.sh'" || true
+  exit 1
+fi
 
 echo "== [4/5] Upload =="
 $SSH "mkdir -p '$REMOTE_DIR/data' \
