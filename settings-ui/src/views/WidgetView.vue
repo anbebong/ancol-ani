@@ -115,12 +115,11 @@ const bubbleOpacity = ref(0.92);
 // Drives .text-bubble-preview's inline style below - computed so the
 // preview updates live while dragging the opacity slider / picking a color,
 // same as textColor already does via :style further down.
-const bubbleStyle = computed(() => {
-    const hex = bubbleColor.value.slice(1);
-    const n = parseInt(hex, 16) || 0;
-    const rgba = `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${bubbleOpacity.value})`;
-    return { background: rgba, borderColor: bubbleBorderColor.value };
-});
+const bubbleStyle = computed(() => ({
+    background: bubbleColor.value,
+    borderColor: bubbleBorderColor.value,
+    opacity: bubbleOpacity.value,
+}));
 async function loadTextStyle() {
     try {
         const style = await (await fetch('/text/style')).json();

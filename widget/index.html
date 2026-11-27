@@ -194,8 +194,9 @@
         if (style.bubbleOpacity) bubbleOpacity = Number(style.bubbleOpacity) || bubbleOpacity;
         document.getElementById('text-content').style.color = textColor;
         const bubble = document.getElementById('text-bubble');
-        bubble.style.setProperty('--bubble-bg', hexToRgba(bubbleColor, bubbleOpacity));
+        bubble.style.setProperty('--bubble-bg', hexToRgba(bubbleColor, 1));
         bubble.style.setProperty('--bubble-border', bubbleBorderColor);
+        bubble.style.opacity = bubbleOpacity;
     }
 
     function showCurrentLine() {
