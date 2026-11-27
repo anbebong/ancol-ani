@@ -272,7 +272,7 @@ var changelog []byte
 
 // A large GIF (many MB) can freeze the small 70x70 WebView2 panel while it
 // decodes/animates, so uploads are capped to keep the widget responsive.
-const maxGifBytes = 3 << 20 // 3MB
+const maxGifBytes = 5 << 20 // 5MB, matches cmd/syncserver's limit
 
 // Shown on the widget's text bubble until the user sets something else.
 const defaultText = "Ancol Hello"
@@ -333,6 +333,15 @@ var validCorners = map[string]bool{"br": true, "bl": true, "tr": true, "tl": tru
 const defaultTextColor = "#ffffff"
 const defaultTextEffect = "none"
 
+// Bubble background/border, independent of TextColor above - these were
+// hardcoded in widget/index.html's CSS until now. Defaults match that old
+// hardcoded look (#14142b at 0.92 opacity ~= rgba(20,20,43,0.92), #8b73ff
+// border) so existing widgets look unchanged until the user picks new ones.
+const defaultBubbleColor = "#14142b"
+const defaultBubbleBorderColor = "#8b73ff"
+const defaultBubbleOpacity = 0.92
+const minBubbleOpacity = 0.2
+
 var validTextEffects = map[string]bool{"none": true, "fade": true, "bounce": true, "shake": true, "typewriter": true}
 
 var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -346,6 +355,12 @@ type widgetSettings struct {
 	// (the common case) doesn't need to know the current style.
 	TextColor  string `json:"textColor"`
 	TextEffect string `json:"textEffect"`
+	// Bubble background + border/tail color and background opacity - see
+	// defaultBubbleColor above. Kept alongside TextColor/TextEffect since
+	// they're saved together through the same /text/style endpoint.
+	BubbleColor       string  `json:"bubbleColor"`
+	BubbleBorderColor string  `json:"bubbleBorderColor"`
+	BubbleOpacity     float64 `json:"bubbleOpacity"`
 	// Text may hold several lines (one message per line); the widget then
 	// shows them one after another, each for TextInterval seconds.
 	TextInterval int `json:"textInterval"`
@@ -410,6 +425,27 @@ func getTextEffect() string {
 		return e
 	}
 	return defaultTextEffect
+}
+
+func getBubbleColor() string {
+	if c := getSettings().BubbleColor; hexColorRe.MatchString(c) {
+		return c
+	}
+	return defaultBubbleColor
+}
+
+func getBubbleBorderColor() string {
+	if c := getSettings().BubbleBorderColor; hexColorRe.MatchString(c) {
+		return c
+	}
+	return defaultBubbleBorderColor
+}
+
+func getBubbleOpacity() float64 {
+	if o := getSettings().BubbleOpacity; o >= minBubbleOpacity && o <= 1 {
+		return o
+	}
+	return defaultBubbleOpacity
 }
 
 // Seconds each line stays up when Text has several lines.
@@ -683,7 +719,10 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 				http.Error(w, "invalid effect", http.StatusBadRequest)
 				return
 			}
-			// interval is optional (older settings pages don't send it)
+			// interval, bubbleColor/bubbleBorderColor/bubbleOpacity are all
+			// optional (older settings pages, or a save that only touches
+			// color/effect, don't send them) - fall back to whatever is
+			// already saved.
 			interval := getTextInterval()
 			if raw := strings.TrimSpace(r.FormValue("interval")); raw != "" {
 				n, err := strconv.Atoi(raw)
@@ -693,28 +732,62 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 				}
 				interval = n
 			}
+			bubbleColor := getBubbleColor()
+			if raw := strings.TrimSpace(r.FormValue("bubbleColor")); raw != "" {
+				if !hexColorRe.MatchString(raw) {
+					http.Error(w, "invalid bubbleColor", http.StatusBadRequest)
+					return
+				}
+				bubbleColor = raw
+			}
+			bubbleBorderColor := getBubbleBorderColor()
+			if raw := strings.TrimSpace(r.FormValue("bubbleBorderColor")); raw != "" {
+				if !hexColorRe.MatchString(raw) {
+					http.Error(w, "invalid bubbleBorderColor", http.StatusBadRequest)
+					return
+				}
+				bubbleBorderColor = raw
+			}
+			bubbleOpacity := getBubbleOpacity()
+			if raw := strings.TrimSpace(r.FormValue("bubbleOpacity")); raw != "" {
+				n, err := strconv.ParseFloat(raw, 64)
+				if err != nil || n < minBubbleOpacity || n > 1 {
+					http.Error(w, "invalid bubbleOpacity", http.StatusBadRequest)
+					return
+				}
+				bubbleOpacity = n
+			}
 			if err := saveSettings(func(s *widgetSettings) {
 				s.TextColor = color
 				s.TextEffect = effect
 				s.TextInterval = interval
+				s.BubbleColor = bubbleColor
+				s.BubbleBorderColor = bubbleBorderColor
+				s.BubbleOpacity = bubbleOpacity
 			}); err != nil {
 				http.Error(w, "cannot save", http.StatusInternalServerError)
 				return
 			}
-			runtime.EventsEmit(ctx, "server-text-style", map[string]any{"color": color, "effect": effect, "interval": interval})
+			runtime.EventsEmit(ctx, "server-text-style", map[string]any{
+				"color": color, "effect": effect, "interval": interval,
+				"bubbleColor": bubbleColor, "bubbleBorderColor": bubbleBorderColor, "bubbleOpacity": bubbleOpacity,
+			})
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		json.NewEncoder(w).Encode(map[string]any{"color": getTextColor(), "effect": getTextEffect(), "interval": getTextInterval()})
+		json.NewEncoder(w).Encode(map[string]any{
+			"color": getTextColor(), "effect": getTextEffect(), "interval": getTextInterval(),
+			"bubbleColor": getBubbleColor(), "bubbleBorderColor": getBubbleBorderColor(), "bubbleOpacity": getBubbleOpacity(),
+		})
 	})
 
 	mux.HandleFunc("/gif", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(w, r.Body, maxGifBytes)
 			if err := r.ParseMultipartForm(maxGifBytes); err != nil {
-				http.Error(w, "File GIF qua nang (toi da 3MB), chon file nho hon", http.StatusRequestEntityTooLarge)
+				http.Error(w, "File GIF qua nang (toi da 5MB), chon file nho hon", http.StatusRequestEntityTooLarge)
 				return
 			}
 			file, _, err := r.FormFile("gif")
@@ -726,7 +799,7 @@ func startLocalServer(ctx context.Context, ln net.Listener) {
 
 			raw, err := io.ReadAll(file)
 			if err != nil {
-				http.Error(w, "File GIF qua nang (toi da 3MB), chon file nho hon", http.StatusRequestEntityTooLarge)
+				http.Error(w, "File GIF qua nang (toi da 5MB), chon file nho hon", http.StatusRequestEntityTooLarge)
 				return
 			}
 

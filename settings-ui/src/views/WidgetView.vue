@@ -106,12 +106,30 @@ const textEffect = ref('none');
 // accepts 2-30).
 const TEXT_INTERVALS = [2, 3, 4, 5, 8, 10, 15, 30];
 const textInterval = ref(4);
+// Bubble background + border/tail color and background opacity - see
+// app.go's defaultBubbleColor. Independent of textColor above, saved
+// through the same /text/style endpoint.
+const bubbleColor = ref('#14142b');
+const bubbleBorderColor = ref('#8b73ff');
+const bubbleOpacity = ref(0.92);
+// Drives .text-bubble-preview's inline style below - computed so the
+// preview updates live while dragging the opacity slider / picking a color,
+// same as textColor already does via :style further down.
+const bubbleStyle = computed(() => {
+    const hex = bubbleColor.value.slice(1);
+    const n = parseInt(hex, 16) || 0;
+    const rgba = `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${bubbleOpacity.value})`;
+    return { background: rgba, borderColor: bubbleBorderColor.value };
+});
 async function loadTextStyle() {
     try {
         const style = await (await fetch('/text/style')).json();
         textColor.value = style.color || '#ffffff';
         textEffect.value = style.effect || 'none';
         textInterval.value = Number(style.interval) || 4;
+        bubbleColor.value = style.bubbleColor || '#14142b';
+        bubbleBorderColor.value = style.bubbleBorderColor || '#8b73ff';
+        bubbleOpacity.value = Number(style.bubbleOpacity) || 0.92;
     } catch (_) {}
 }
 onMounted(loadTextStyle);
@@ -120,6 +138,9 @@ async function saveTextStyle() {
     form.append('color', textColor.value);
     form.append('effect', textEffect.value);
     form.append('interval', String(textInterval.value));
+    form.append('bubbleColor', bubbleColor.value);
+    form.append('bubbleBorderColor', bubbleBorderColor.value);
+    form.append('bubbleOpacity', String(bubbleOpacity.value));
     try {
         await fetch('/text/style', { method: 'POST', body: form });
     } catch (err) {
@@ -479,7 +500,7 @@ async function pushCurrent() {
               <div class="flex flex-col items-center mt-1">
                 <div class="widget-replica">
                   <div class="text-bubble-slot">
-                    <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor }">
+                    <div ref="bubbleRef" class="text-bubble-preview" :class="'fx-' + textEffect" :key="previewAnimKey" :style="{ color: textColor, ...bubbleStyle }">
                       {{ previewShown }}
                     </div>
                   </div>
@@ -563,29 +584,65 @@ async function pushCurrent() {
              separating this row from row 1 above it (on top of the mt-4
              spacing, which alone read as too subtle to tell the two rows
              apart). -->
+        <!-- self-start on both columns below: don't stretch to equal
+             height. row2-divider stays unstretched-default so it still
+             spans the full row. -->
         <div class="flex flex-col sm:flex-row gap-6 mt-4 section-row section-row-top">
-          <div class="flex flex-col gap-2 min-w-0 style-container" style="flex: 1 1 0%;">
+          <div class="flex flex-col gap-2 min-w-0 style-container self-start order-2 sm:order-1" style="flex: 1 1 0%;">
             <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="sparkles"/> {{ t('textStyleLabel') }}</h2>
             <!-- style-row: column (each control full-width) while this
                  column is narrow, row (side by side) once it's wide enough
                  - driven by THIS container's own width, not the viewport,
                  since it's the 1/3 column that actually gets squeezed. -->
-            <div class="style-row mt-1">
-              <input v-model="textColor" type="color" class="input input-bordered h-10 w-14 p-1" @change="saveTextStyle"/>
-              <select v-model="textEffect" class="select select-bordered select-sm flex-1 style-select" @change="saveTextStyle">
-                <option v-for="fx in TEXT_EFFECTS" :key="fx.id" :value="fx.id">{{ t(fx.labelKey) }}</option>
-              </select>
-              <select v-model.number="textInterval" class="select select-bordered select-sm style-select" :title="t('textIntervalLabel')" @change="saveTextStyle">
-                <option v-for="n in TEXT_INTERVALS" :key="n" :value="n">{{ t('textIntervalOption', { n }) }}</option>
-              </select>
+            <!-- The 3 color swatches (chữ/nền/viền) + opacity slider stay in
+                 one row - each swatch labeled (not just a bare circle) so
+                 it's clear which part of the bubble it colors, a tooltip
+                 alone wasn't enough. Swatches are small circles now
+                 (color-swatch below), not full-size <input type=color>
+                 boxes. -->
+            <div class="flex items-start gap-2 mt-1">
+              <div class="flex flex-col gap-0.5 items-center">
+                <span class="text-[10px] text-base-content/60">{{ t('textColorShort') }}</span>
+                <input v-model="textColor" type="color" class="color-swatch" :title="t('textColorLabel')" @change="saveTextStyle"/>
+              </div>
+              <div class="flex flex-col gap-0.5 items-center">
+                <span class="text-[10px] text-base-content/60">{{ t('bubbleColorShort') }}</span>
+                <input v-model="bubbleColor" type="color" class="color-swatch" :title="t('bubbleColorLabel')" @change="saveTextStyle"/>
+              </div>
+              <div class="flex flex-col gap-0.5 items-center">
+                <span class="text-[10px] text-base-content/60">{{ t('bubbleBorderColorShort') }}</span>
+                <input v-model="bubbleBorderColor" type="color" class="color-swatch" :title="t('bubbleBorderColorLabel')" @change="saveTextStyle"/>
+              </div>
+              <div class="flex flex-col gap-0.5 flex-1">
+                <span class="text-[10px] text-base-content/60">{{ t('bubbleOpacityShort') }}</span>
+                <input v-model.number="bubbleOpacity" type="range" min="0.2" max="1" step="0.02" class="range range-xs" :title="t('bubbleOpacityLabel')" @change="saveTextStyle"/>
+              </div>
+            </div>
+            <div class="style-row mt-2">
+              <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                <span class="text-[10px] text-base-content/60">{{ t('textEffectShort') }}</span>
+                <select v-model="textEffect" class="select select-bordered select-sm w-full style-select" :title="t('textStyleLabel')" @change="saveTextStyle">
+                  <option v-for="fx in TEXT_EFFECTS" :key="fx.id" :value="fx.id">{{ t(fx.labelKey) }}</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-[10px] text-base-content/60">{{ t('textIntervalShort') }}</span>
+                <select v-model.number="textInterval" class="select select-bordered select-sm style-select" :title="t('textIntervalLabel')" @change="saveTextStyle">
+                  <option v-for="n in TEXT_INTERVALS" :key="n" :value="n">{{ t('textIntervalOption', { n }) }}</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div class="flex flex-col gap-2 min-w-0 section-right" style="flex: 2 1 0%;">
+          <!-- Real flex item (stretches full row height), not a ::before
+               on a self-start column (would be cut short). -->
+          <div class="hidden sm:block row2-divider order-2"></div>
+
+          <div class="flex flex-col gap-2 min-w-0 section-right-plain self-start order-1 sm:order-3" style="flex: 2 1 0%;">
             <h2 class="font-bold flex items-center gap-2 section-title"><Icon name="type"/> {{ t('textLabel') }}</h2>
             <p class="text-xs text-base-content/60">{{ adapterEnabled ? t('textHintDisabledByAdapter') : t('textHint') }}</p>
             <div class="flex gap-2 mt-1 items-stretch btn-container">
-              <textarea v-model="text" @input="textDirty = true" :disabled="adapterEnabled" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input flex-1 min-w-0 resize-y" autofocus></textarea>
+              <textarea v-model="text" @input="textDirty = true" :disabled="adapterEnabled" :placeholder="t('textPlaceholder')" rows="1" class="textarea textarea-bordered auth-input text-input-thin flex-1 min-w-0 resize-y" autofocus></textarea>
               <button type="submit" class="btn btn-primary" :disabled="adapterEnabled" :title="t('textSubmit')">
                 <Icon name="send" :size="16"/> <span class="btn-label">{{ t('textSubmit') }}</span>
               </button>
@@ -726,6 +783,33 @@ async function pushCurrent() {
   .style-row { flex-direction: row; align-items: center; }
 }
 
+/* .color-swatch: a small round color picker, instead of daisyUI's full
+   .input box (rectangular, way bigger than needed for 3 of these side by
+   side with an opacity slider in the same row). Browsers render
+   type="color" with their own chrome around the swatch (a border + padding
+   on Chromium) that can't be removed with background/border alone, so it's
+   stripped first via -webkit-appearance before this shape is applied. */
+.color-swatch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  background: none;
+}
+.color-swatch::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; }
+.color-swatch::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+/* .text-input-thin: thinner border than .auth-input's shared 2px (theme/
+   pixel.css, also used by the login form) - overridden locally here only,
+   not in the shared file, since login's input isn't too thick, this
+   textarea just reads heavier next to its own small icon-only button. */
+.text-input-thin.auth-input { border-width: 1px !important; }
+.text-input-thin.auth-input:focus-within { box-shadow: 2px 2px 0 #5c3eeb55 !important; }
+
 /* .dropzone-compact: shrinks the shared .dropzone (pixel.css, also used by
    LibraryView here and in the portal) down for this narrower GIF column -
    overridden locally instead of touching the shared rule, which the other
@@ -757,11 +841,21 @@ async function pushCurrent() {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 2px;
+    width: 1px;
     background: linear-gradient(180deg, #8b73ff, #ff6bd6);
     -webkit-mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
     mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
   }
+  .section-right-plain { padding-left: 1rem; }
+}
+/* row2-divider: real flex item version of the same dashed gradient rule
+   above, no padding-left of its own (the gap-6 on the row already spaces
+   it out). */
+.row2-divider {
+  width: 1px;
+  background: linear-gradient(180deg, #8b73ff, #ff6bd6);
+  -webkit-mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
+  mask-image: repeating-linear-gradient(180deg, #000 0 6px, transparent 6px 12px);
 }
 .section-row-top {
   position: relative;
@@ -773,7 +867,7 @@ async function pushCurrent() {
   left: 0;
   right: 0;
   top: 0;
-  height: 2px;
+  height: 1px;
   background: linear-gradient(90deg, #8b73ff, #ff6bd6);
   -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
   mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 12px);
@@ -816,6 +910,8 @@ async function pushCurrent() {
   width: max-content;
   max-width: calc(112px * 68 / 70);
   padding: calc(112px * 1 / 70) calc(112px * 4 / 70);
+  /* background/border-color come from the :style="bubbleStyle" binding
+     above (user-customizable) - these are just a fallback before it loads. */
   background: rgba(20, 20, 43, 0.92);
   border: calc(112px * 1.5 / 70) solid #8b73ff;
   border-radius: calc(112px * 6 / 70);
